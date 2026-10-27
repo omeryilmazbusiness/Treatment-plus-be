@@ -11,7 +11,9 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	aihttp "github.com/treatment-plus/treatment-plus-be/internal/ai/http"
+	catalogapp "github.com/treatment-plus/treatment-plus-be/internal/catalog/app"
 	cataloghttp "github.com/treatment-plus/treatment-plus-be/internal/catalog/http"
+	catalogpg "github.com/treatment-plus/treatment-plus-be/internal/catalog/pg"
 	clinicapp "github.com/treatment-plus/treatment-plus-be/internal/clinic/app"
 	clinichttp "github.com/treatment-plus/treatment-plus-be/internal/clinic/http"
 	clinicpg "github.com/treatment-plus/treatment-plus-be/internal/clinic/pg"
@@ -20,7 +22,9 @@ import (
 	identitypg "github.com/treatment-plus/treatment-plus-be/internal/identity/pg"
 	mediahttp "github.com/treatment-plus/treatment-plus-be/internal/media/http"
 	outputhttp "github.com/treatment-plus/treatment-plus-be/internal/output/http"
+	planapp "github.com/treatment-plus/treatment-plus-be/internal/plan/app"
 	planhttp "github.com/treatment-plus/treatment-plus-be/internal/plan/http"
+	planpg "github.com/treatment-plus/treatment-plus-be/internal/plan/pg"
 	"github.com/treatment-plus/treatment-plus-be/internal/platform/authn"
 	"github.com/treatment-plus/treatment-plus-be/internal/platform/config"
 	"github.com/treatment-plus/treatment-plus-be/internal/platform/httpx"
@@ -28,6 +32,8 @@ import (
 	"github.com/treatment-plus/treatment-plus-be/internal/platform/redisx"
 	sharehttp "github.com/treatment-plus/treatment-plus-be/internal/share/http"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/clock"
+	"github.com/treatment-plus/treatment-plus-be/internal/shared/crypto"
+	"github.com/treatment-plus/treatment-plus-be/internal/shared/id"
 )
 
 type API struct {
@@ -35,6 +41,37 @@ type API struct {
 	Pool   *pgxpool.Pool
 	Redis  *redis.Client
 	Log    *slog.Logger
+}
+
+type catalogAdapter struct {
+	svc *catalogapp.Service
+}
+
+func (c *catalogAdapter) GetTreatment(ctx context.Context, wsID id.ID, treatID id.ID) (string, string, int64, error) {
+	price, t, err := c.svc.GetTreatmentPrice(ctx, wsID, treatID)
+	if err != nil {
+		return "", "", 0, err
+	}
+	return t.Code, t.Name, price, nil
+}
+
+type clinicSettingsAdapter struct {
+	svc *clinicapp.Service
+}
+
+func (c *clinicSettingsAdapter) GetClinicSettings(ctx context.Context, wsID id.ID) (planapp.ClinicSettingsDTO, error) {
+	st, err := c.svc.GetSettings(ctx, wsID)
+	if err != nil {
+		return planapp.ClinicSettingsDTO{}, err
+	}
+	return planapp.ClinicSettingsDTO{
+		Name:    st.Name,
+		Phone:   st.Phone,
+		Palette: string(st.Palette),
+		LogoKey: st.LogoKey,
+		Intro:   st.Intro,
+		Legal:   st.Legal,
+	}, nil
 }
 
 func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, error) {
@@ -82,6 +119,19 @@ func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, err
 	clinicStore := clinicpg.New(pool)
 	clinicSvc := clinicapp.NewService(clinicStore)
 
+	catalogStore := catalogpg.New(pool)
+	catalogSvc := catalogapp.NewService(catalogStore)
+
+	encrypter := crypto.NewAESGCM(cfg.Auth.KMSKey)
+	planStore := planpg.New(pool)
+	planSvc := planapp.NewService(
+		planStore,
+		planStore,
+		&catalogAdapter{svc: catalogSvc},
+		&clinicSettingsAdapter{svc: clinicSvc},
+		encrypter,
+	)
+
 	srv := httpx.NewServer(httpx.Options{
 		Config: cfg,
 		Log:    log,
@@ -92,8 +142,8 @@ func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, err
 		Registrars: []httpx.RouteRegistrar{
 			identityhttp.NewHandler(identitySvc, tokens),
 			clinichttp.NewHandler(clinicSvc, tokens),
-			cataloghttp.NewHandler(),
-			planhttp.NewHandler(),
+			cataloghttp.NewHandler(catalogSvc, tokens),
+			planhttp.NewHandler(planSvc, tokens),
 			mediahttp.NewHandler(),
 			outputhttp.NewHandler(),
 			sharehttp.NewHandler(),

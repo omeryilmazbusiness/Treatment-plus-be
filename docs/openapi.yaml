@@ -135,6 +135,112 @@ paths:
                 $ref: "#/components/schemas/MeResponse"
         "403":
           $ref: "#/components/responses/Error"
+  /catalog/diagnoses:
+    get:
+      summary: List diagnoses for workspace
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create diagnosis
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+  /catalog/treatments:
+    get:
+      summary: List treatments for workspace
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create treatment
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+  /catalog/price-lists:
+    get:
+      summary: List price lists for workspace
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create price list
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+  /patients:
+    get:
+      summary: List patients
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create patient
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+  /plans:
+    get:
+      summary: List plans for current workspace
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create classic plan
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+  /plans/{id}:
+    get:
+      summary: Get plan details with visits, items, discounts and totals
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+    patch:
+      summary: Update plan title or diagnoses
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+  /plans/{id}/visits:
+    put:
+      summary: Replace visits for plan
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+  /plans/{id}/items:
+    put:
+      summary: Replace items for plan (recalculates subtotal)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+  /plans/{id}/discounts:
+    put:
+      summary: Replace discounts for plan (recalculates grand total)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+  /plans/{id}/ready:
+    post:
+      summary: Lock plan and freeze snapshot
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
 components:
   securitySchemes:
     bearerAuth:

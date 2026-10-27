@@ -127,7 +127,7 @@ func Load() (Config, error) {
 			JWTAccessSecret:  env("JWT_ACCESS_SECRET", ""),
 			JWTRefreshSecret: env("JWT_REFRESH_SECRET", ""),
 			KMSKey:           env("KMS_KEY", ""),
-			AccessTTL:        envDuration("JWT_ACCESS_TTL", 15*time.Minute),
+			AccessTTL:        envDuration("JWT_ACCESS_TTL", 24*time.Hour),
 			RefreshTTL:       envDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
 		},
 		Object: Object{

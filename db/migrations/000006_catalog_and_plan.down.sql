@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS plan_discounts;
+DROP TABLE IF EXISTS plan_items;
+DROP TABLE IF EXISTS plan_visits;
+DROP TABLE IF EXISTS plans;
+DROP TABLE IF EXISTS patients;
+DROP TABLE IF EXISTS price_items;
+DROP TABLE IF EXISTS price_lists;
+DROP TABLE IF EXISTS treatments;
+DROP TABLE IF EXISTS diagnoses;

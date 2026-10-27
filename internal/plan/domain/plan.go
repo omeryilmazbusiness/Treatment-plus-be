@@ -1,64 +1,206 @@
-// Package domain is the plan engine: patient, visits, lines, totals, state machine.
-// No PDF, AI, or HTTP types live here.
+// Package domain is the treatment planning context (Classic form).
 package domain
 
 import (
+	"strings"
+	"time"
+
+	"github.com/treatment-plus/treatment-plus-be/internal/shared/errx"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/id"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/money"
 )
 
-type Status string
+type PlanKind string
 
 const (
-	StatusDraft    Status = "draft"
-	StatusReady    Status = "ready"
-	StatusSent     Status = "sent"
-	StatusViewed   Status = "viewed"
-	StatusAccepted Status = "accepted"
-	StatusExpired  Status = "expired"
-	StatusRevoked  Status = "revoked"
+	KindClassic PlanKind = "classic"
+)
+
+type PlanStatus string
+
+const (
+	StatusDraft PlanStatus = "draft"
+	StatusReady PlanStatus = "ready"
 )
 
 type Patient struct {
-	ID       id.ID
-	ClinicID id.ID
-	Name     string
+	ID          id.ID     `json:"id"`
+	WorkspaceID id.ID     `json:"workspace_id"`
+	Name        string    `json:"name"`
+	Contact     string    `json:"contact"` // Decrypted representation in domain
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+func (p Patient) Validate() error {
+	if strings.TrimSpace(p.Name) == "" {
+		return errx.New("invalid_patient_name", "patient name cannot be empty", errx.ErrInvalid)
+	}
+	return nil
 }
 
 type Visit struct {
-	ID       id.ID
-	Ordinal  int
-	Title    string
-	WaitNote string
-	Items    []Item
+	ID          id.ID     `json:"id"`
+	PlanID      id.ID     `json:"plan_id"`
+	WorkspaceID id.ID     `json:"workspace_id"`
+	OrderNum    int       `json:"order_num"`
+	Title       string    `json:"title"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type Item struct {
-	ID          id.ID
-	TreatmentID id.ID
-	Quantity    int64
-	UnitPrice   money.Money
-	InPackage   bool
+	ID            id.ID     `json:"id"`
+	PlanID        id.ID     `json:"plan_id"`
+	VisitID       *id.ID    `json:"visit_id,omitempty"`
+	WorkspaceID   id.ID     `json:"workspace_id"`
+	TreatmentID   *id.ID    `json:"treatment_id,omitempty"`
+	TreatmentName string    `json:"treatment_name"`
+	ToothNumber   *string   `json:"tooth_number,omitempty"`
+	Quantity      int       `json:"quantity"`
+	UnitPrice     int64     `json:"unit_price"` // minor units (kuruş)
+	IsPackage     bool      `json:"is_package"` // package items do not increase total
+	OrderNum      int       `json:"order_num"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+func (i Item) LineTotal() int64 {
+	if i.IsPackage {
+		return 0
+	}
+	if i.Quantity <= 0 || i.UnitPrice <= 0 {
+		return 0
+	}
+	return int64(i.Quantity) * i.UnitPrice
 }
 
 type Discount struct {
-	Label  string
-	Amount money.Money
+	ID          id.ID     `json:"id"`
+	PlanID      id.ID     `json:"plan_id"`
+	WorkspaceID id.ID     `json:"workspace_id"`
+	Label       string    `json:"label"`
+	Amount      int64     `json:"amount"` // minor units (kuruş)
+	OrderNum    int       `json:"order_num"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type Totals struct {
-	Subtotal money.Money
-	Discount money.Money
-	Grand    money.Money
+	Subtotal int64 `json:"subtotal"` // minor unit
+	Discount int64 `json:"discount"` // minor unit
+	Grand    int64 `json:"grand"`    // minor unit
+}
+
+func CalculateTotals(items []Item, discounts []Discount, curr money.Currency) (Totals, error) {
+	var subtotal int64
+	for _, it := range items {
+		line := it.LineTotal()
+		mSub, err := money.New(subtotal, curr)
+		if err != nil {
+			return Totals{}, err
+		}
+		mLine, err := money.New(line, curr)
+		if err != nil {
+			return Totals{}, err
+		}
+		res, err := mSub.Add(mLine)
+		if err != nil {
+			return Totals{}, err
+		}
+		subtotal = res.Amount
+	}
+
+	var discountTotal int64
+	for _, d := range discounts {
+		if d.Amount < 0 {
+			continue
+		}
+		mDisc, err := money.New(discountTotal, curr)
+		if err != nil {
+			return Totals{}, err
+		}
+		mAdd, err := money.New(d.Amount, curr)
+		if err != nil {
+			return Totals{}, err
+		}
+		res, err := mDisc.Add(mAdd)
+		if err != nil {
+			return Totals{}, err
+		}
+		discountTotal = res.Amount
+	}
+
+	grand := subtotal - discountTotal
+	if grand < 0 {
+		grand = 0
+	}
+
+	return Totals{
+		Subtotal: subtotal,
+		Discount: discountTotal,
+		Grand:    grand,
+	}, nil
 }
 
 type Plan struct {
-	ID         id.ID
-	ClinicID   id.ID
-	PatientID  id.ID
-	Status     Status
-	Visits     []Visit
-	Discounts  []Discount
-	Totals     Totals
-	Snapshot   []byte
+	ID             id.ID          `json:"id"`
+	WorkspaceID    id.ID          `json:"workspace_id"`
+	PatientID      id.ID          `json:"patient_id"`
+	Title          string         `json:"title"`
+	Kind           PlanKind       `json:"kind"`
+	Status         PlanStatus     `json:"status"`
+	Currency       money.Currency `json:"currency"`
+	Diagnoses      []string       `json:"diagnoses"`
+	TotalsSubtotal int64          `json:"totals_subtotal"`
+	TotalsDiscount int64          `json:"totals_discount"`
+	TotalsGrand    int64          `json:"totals_grand"`
+	SnapshotJSON   any            `json:"snapshot_json,omitempty"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+
+	Patient   *Patient   `json:"patient,omitempty"`
+	Visits    []Visit    `json:"visits,omitempty"`
+	Items     []Item     `json:"items,omitempty"`
+	Discounts []Discount `json:"discounts,omitempty"`
+}
+
+type ClinicSnapshot struct {
+	Name    string `json:"name"`
+	Phone   string `json:"phone"`
+	Palette string `json:"palette"`
+	LogoKey string `json:"logo_key"`
+	Intro   string `json:"intro"`
+	Legal   string `json:"legal"`
+}
+
+type PatientSnapshot struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Contact string `json:"contact"`
+}
+
+type ItemSnapshot struct {
+	VisitTitle    string  `json:"visit_title"`
+	TreatmentName string  `json:"treatment_name"`
+	ToothNumber   *string `json:"tooth_number,omitempty"`
+	Quantity      int     `json:"quantity"`
+	UnitPrice     int64   `json:"unit_price"`
+	IsPackage     bool    `json:"is_package"`
+	LineTotal     int64   `json:"line_total"`
+}
+
+type Snapshot struct {
+	PlanID    string          `json:"plan_id"`
+	Title     string          `json:"title"`
+	Kind      string          `json:"kind"`
+	Currency  string          `json:"currency"`
+	Clinic    ClinicSnapshot  `json:"clinic"`
+	Patient   PatientSnapshot `json:"patient"`
+	Diagnoses []string        `json:"diagnoses"`
+	Visits    []Visit         `json:"visits"`
+	Items     []ItemSnapshot  `json:"items"`
+	Discounts []Discount      `json:"discounts"`
+	Totals    Totals          `json:"totals"`
+	ReadyAt   time.Time       `json:"ready_at"`
 }
