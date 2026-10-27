@@ -12,12 +12,13 @@ import (
 
 type Querier interface {
 	IdentityCountVisibleClinics(ctx context.Context) (int64, error)
-	IdentityFindClinicByEmail(ctx context.Context, email string) (Clinic, error)
-	IdentityGetClinicByID(ctx context.Context, id pgtype.UUID) (Clinic, error)
+	IdentityFindAccountByEmail(ctx context.Context, email string) (IdentityAccountRow, error)
+	IdentityFindAccountByWorkspace(ctx context.Context, workspaceID pgtype.UUID) (IdentityAccountRow, error)
+	IdentityGetClinicByID(ctx context.Context, id pgtype.UUID) (IdentityGetClinicByIDRow, error)
 	IdentityGetClinicByIDAuth(ctx context.Context, id pgtype.UUID) (Clinic, error)
 	IdentityGetSessionByRefreshHash(ctx context.Context, refreshHash []byte) (Session, error)
 	IdentityMarkSessionReused(ctx context.Context, arg IdentityMarkSessionReusedParams) error
-	IdentityRegisterClinic(ctx context.Context, arg IdentityRegisterClinicParams) (Clinic, error)
+	IdentityRegisterAccount(ctx context.Context, arg IdentityRegisterAccountParams) error
 	IdentityRevokeFamily(ctx context.Context, arg IdentityRevokeFamilyParams) error
 	IdentitySaveSession(ctx context.Context, arg IdentitySaveSessionParams) (Session, error)
 	IdentityVisibleClinicID(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)

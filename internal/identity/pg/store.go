@@ -27,36 +27,36 @@ func New(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool, q: dbgen.New(pool)}
 }
 
-func (s *Store) GetVisible(ctx context.Context, clinicID id.ID) (domain.Clinic, error) {
-	var out domain.Clinic
+func (s *Store) GetVisible(ctx context.Context, workspaceID id.ID) (domain.Workspace, error) {
+	var out domain.Workspace
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		if err := rls.Apply(ctx, tx); err != nil {
 			return err
 		}
-		row, err := s.q.WithTx(tx).IdentityGetClinicByID(ctx, toUUID(clinicID))
+		row, err := s.q.WithTx(tx).IdentityGetClinicByID(ctx, toUUID(workspaceID))
 		if err != nil {
 			return mapNotFound(err)
 		}
-		out = clinicFrom(row.ID, row.Name, row.Email, row.PasswordHash, row.CreatedAt)
+		out = workspaceFromClinic(row)
 		return nil
 	})
 	return out, err
 }
 
-func (s *Store) FindByID(ctx context.Context, clinicID id.ID) (domain.Clinic, error) {
-	row, err := s.q.IdentityGetClinicByIDAuth(ctx, toUUID(clinicID))
+func (s *Store) FindByWorkspaceID(ctx context.Context, workspaceID id.ID) (domain.Account, error) {
+	row, err := s.q.IdentityFindAccountByWorkspace(ctx, toUUID(workspaceID))
 	if err != nil {
-		return domain.Clinic{}, mapNotFound(err)
+		return domain.Account{}, mapNotFound(err)
 	}
-	return clinicFrom(row.ID, row.Name, row.Email, row.PasswordHash, row.CreatedAt), nil
+	return accountFrom(row), nil
 }
 
-func (s *Store) FindByEmail(ctx context.Context, email string) (domain.Clinic, error) {
-	row, err := s.q.IdentityFindClinicByEmail(ctx, email)
+func (s *Store) FindByEmail(ctx context.Context, email string) (domain.Account, error) {
+	row, err := s.q.IdentityFindAccountByEmail(ctx, email)
 	if err != nil {
-		return domain.Clinic{}, mapNotFound(err)
+		return domain.Account{}, mapNotFound(err)
 	}
-	return clinicFrom(row.ID, row.Name, row.Email, row.PasswordHash, row.CreatedAt), nil
+	return accountFrom(row), nil
 }
 
 func (s *Store) GetByRefreshHash(ctx context.Context, hash []byte) (domain.Session, error) {
@@ -77,12 +77,14 @@ type writeTx struct {
 	q *dbgen.Queries
 }
 
-func (t *writeTx) CreateClinic(ctx context.Context, clinic domain.Clinic) error {
-	_, err := t.q.IdentityRegisterClinic(ctx, dbgen.IdentityRegisterClinicParams{
-		ID:           toUUID(clinic.ID),
-		Name:         clinic.Name,
-		Email:        clinic.Email,
-		PasswordHash: clinic.PasswordHash,
+func (t *writeTx) CreateAccount(ctx context.Context, account domain.Account) error {
+	err := t.q.IdentityRegisterAccount(ctx, dbgen.IdentityRegisterAccountParams{
+		UserID:       toUUID(account.User.ID),
+		WorkspaceID:  toUUID(account.Workspace.ID),
+		Name:         account.Workspace.Name,
+		Email:        account.User.Email,
+		PasswordHash: account.User.PasswordHash,
+		Role:         dbgen.IdentityRole(account.Role),
 	})
 	return mapWrite(err)
 }
@@ -90,7 +92,9 @@ func (t *writeTx) CreateClinic(ctx context.Context, clinic domain.Clinic) error 
 func (t *writeTx) SaveSession(ctx context.Context, session domain.Session) error {
 	_, err := t.q.IdentitySaveSession(ctx, dbgen.IdentitySaveSessionParams{
 		ID:          toUUID(session.ID),
+		UserID:      toUUID(session.UserID),
 		ClinicID:    toUUID(session.ClinicID),
+		Role:        dbgen.IdentityRole(session.Role),
 		RefreshHash: session.RefreshHash,
 		FamilyID:    toUUID(session.FamilyID),
 		ExpiresAt:   toTimestamptz(session.ExpiresAt),
@@ -112,13 +116,30 @@ func (t *writeTx) RevokeFamily(ctx context.Context, familyID id.ID, at time.Time
 	}))
 }
 
-func clinicFrom(rawID pgtype.UUID, name, email, hash string, created pgtype.Timestamptz) domain.Clinic {
-	return domain.Clinic{
-		ID:           mustID(rawID),
-		Name:         name,
-		Email:        email,
-		PasswordHash: hash,
-		CreatedAt:    created.Time,
+func workspaceFromClinic(row dbgen.IdentityGetClinicByIDRow) domain.Workspace {
+	return domain.Workspace{
+		ID:          mustID(row.ID),
+		OwnerUserID: mustID(row.OwnerUserID),
+		Name:        row.Name,
+		Kind:        domain.Role(row.Kind),
+		CreatedAt:   row.CreatedAt.Time,
+	}
+}
+
+func accountFrom(row dbgen.IdentityAccountRow) domain.Account {
+	return domain.Account{
+		User: domain.User{
+			ID:           mustID(row.UserID),
+			Email:        row.Email,
+			PasswordHash: row.PasswordHash,
+			CreatedAt:    row.UserCreatedAt.Time,
+		},
+		Workspace: domain.Workspace{
+			ID:   mustID(row.WorkspaceID),
+			Name: row.WorkspaceName,
+			Kind: domain.Role(row.WorkspaceKind),
+		},
+		Role: domain.Role(row.Role),
 	}
 }
 
@@ -134,7 +155,9 @@ func sessionFrom(row dbgen.Session) domain.Session {
 	}
 	return domain.Session{
 		ID:          mustID(row.ID),
+		UserID:      mustID(row.UserID),
 		ClinicID:    mustID(row.ClinicID),
+		Role:        domain.Role(row.Role),
 		RefreshHash: row.RefreshHash,
 		FamilyID:    mustID(row.FamilyID),
 		ReusedAt:    reused,

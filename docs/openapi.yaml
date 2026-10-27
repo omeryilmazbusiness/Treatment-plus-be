@@ -1,15 +1,15 @@
 openapi: 3.0.3
 info:
   title: Treatment Plus API
-  version: 0.1.0
-  description: Clinic-only identity. Browser cookies stay on the Next BFF.
+  version: 0.2.0
+  description: Users authenticate. Role clinic|personal authorizes. Cookies stay on the Next BFF.
 servers:
   - url: /v1
 paths:
   /auth/register:
     post:
-      summary: Register a clinic account
-      operationId: registerClinic
+      summary: Register a user as clinic or personal
+      operationId: register
       requestBody:
         required: true
         content:
@@ -30,7 +30,7 @@ paths:
   /auth/login:
     post:
       summary: Login
-      operationId: loginClinic
+      operationId: login
       requestBody:
         required: true
         content:
@@ -46,11 +46,9 @@ paths:
                 $ref: "#/components/schemas/AuthResponse"
         "401":
           $ref: "#/components/responses/Error"
-        "422":
-          $ref: "#/components/responses/Error"
   /auth/refresh:
     post:
-      summary: Rotate refresh token. Reuse revokes the session family.
+      summary: Rotate refresh token
       operationId: refreshSession
       requestBody:
         required: true
@@ -70,7 +68,7 @@ paths:
   /auth/logout:
     post:
       summary: Revoke the refresh token family
-      operationId: logoutClinic
+      operationId: logout
       requestBody:
         required: true
         content:
@@ -82,7 +80,7 @@ paths:
           description: No content
   /auth/me:
     get:
-      summary: Current clinic
+      summary: Current user and workspace
       operationId: me
       security:
         - bearerAuth: []
@@ -92,12 +90,33 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Clinic"
+                $ref: "#/components/schemas/MeResponse"
         "401":
+          $ref: "#/components/responses/Error"
+  /workspaces/{workspaceID}:
+    get:
+      summary: Own workspace only
+      operationId: getWorkspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+        "403":
           $ref: "#/components/responses/Error"
   /clinics/{clinicID}:
     get:
-      summary: Get a clinic by id (own clinic only)
+      summary: Own workspace (alias)
       operationId: getClinic
       security:
         - bearerAuth: []
@@ -113,9 +132,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Clinic"
-        "401":
-          $ref: "#/components/responses/Error"
+                $ref: "#/components/schemas/MeResponse"
         "403":
           $ref: "#/components/responses/Error"
 components:
@@ -132,28 +149,28 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
   schemas:
+    Role:
+      type: string
+      enum: [clinic, personal]
     RegisterRequest:
       type: object
-      required: [name, email, password]
+      required: [name, email, password, role]
       properties:
         name:
           type: string
-          minLength: 2
-          maxLength: 120
         email:
           type: string
           format: email
         password:
           type: string
-          minLength: 8
-          maxLength: 128
+        role:
+          $ref: "#/components/schemas/Role"
     LoginRequest:
       type: object
       required: [email, password]
       properties:
         email:
           type: string
-          format: email
         password:
           type: string
     RefreshRequest:
@@ -162,17 +179,26 @@ components:
       properties:
         refresh_token:
           type: string
-    Clinic:
+    User:
       type: object
-      required: [id, name, email]
+      required: [id, email, role]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        role:
+          $ref: "#/components/schemas/Role"
+    Workspace:
+      type: object
+      required: [id, name, kind]
       properties:
         id:
           type: string
         name:
           type: string
-        email:
-          type: string
-          format: email
+        kind:
+          $ref: "#/components/schemas/Role"
     Tokens:
       type: object
       required: [access_token, refresh_token, token_type, expires_in]
@@ -188,12 +214,22 @@ components:
           type: integer
     AuthResponse:
       type: object
-      required: [clinic, tokens]
+      required: [user, workspace, tokens]
       properties:
-        clinic:
-          $ref: "#/components/schemas/Clinic"
+        user:
+          $ref: "#/components/schemas/User"
+        workspace:
+          $ref: "#/components/schemas/Workspace"
         tokens:
           $ref: "#/components/schemas/Tokens"
+    MeResponse:
+      type: object
+      required: [user, workspace]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        workspace:
+          $ref: "#/components/schemas/Workspace"
     Error:
       type: object
       required: [error]

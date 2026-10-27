@@ -7,6 +7,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
+	"github.com/treatment-plus/treatment-plus-be/internal/identity/domain"
 	"github.com/treatment-plus/treatment-plus-be/internal/platform/config"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/clock"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/errx"
@@ -15,8 +16,16 @@ import (
 
 const issuer = "treatment-plus"
 
+type Principal struct {
+	UserID      id.ID
+	WorkspaceID id.ID
+	Role        domain.Role
+}
+
 type Claims struct {
+	UserID   string `json:"user_id"`
 	ClinicID string `json:"clinic_id"`
+	Role     string `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -40,15 +49,17 @@ func NewJWT(cfg config.Auth, clk clock.Clock) (*JWT, error) {
 	return &JWT{secret: []byte(cfg.JWTAccessSecret), ttl: ttl, clock: clk}, nil
 }
 
-func (j *JWT) Issue(clinicID id.ID, now time.Time) (string, time.Duration, error) {
+func (j *JWT) Issue(userID, workspaceID id.ID, role domain.Role, now time.Time) (string, time.Duration, error) {
 	if now.IsZero() {
 		now = j.clock.Now()
 	}
 	claims := Claims{
-		ClinicID: clinicID.String(),
+		UserID:   userID.String(),
+		ClinicID: workspaceID.String(),
+		Role:     string(role),
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    issuer,
-			Subject:   clinicID.String(),
+			Subject:   userID.String(),
 			ID:        id.New().String(),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now.Add(-5 * time.Second)),
@@ -63,7 +74,7 @@ func (j *JWT) Issue(clinicID id.ID, now time.Time) (string, time.Duration, error
 	return signed, j.ttl, nil
 }
 
-func (j *JWT) ParseAccess(raw string) (id.ID, error) {
+func (j *JWT) ParseAccess(raw string) (Principal, error) {
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(raw, claims, func(t *jwt.Token) (any, error) {
 		if t.Method != jwt.SigningMethodHS256 {
@@ -72,16 +83,21 @@ func (j *JWT) ParseAccess(raw string) (id.ID, error) {
 		return j.secret, nil
 	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithIssuer(issuer), jwt.WithTimeFunc(j.clock.Now), jwt.WithLeeway(5*time.Second))
 	if err != nil || !token.Valid {
-		return id.ID{}, errx.ErrUnauthenticated
+		return Principal{}, errx.ErrUnauthenticated
 	}
-	if claims.ClinicID == "" {
-		claims.ClinicID = claims.Subject
-	}
-	parsed, err := id.Parse(claims.ClinicID)
+	role, err := domain.ParseRole(claims.Role)
 	if err != nil {
-		return id.ID{}, errx.ErrUnauthenticated
+		return Principal{}, errx.ErrUnauthenticated
 	}
-	return parsed, nil
+	userID, err := id.Parse(firstNonEmpty(claims.UserID, claims.Subject))
+	if err != nil {
+		return Principal{}, errx.ErrUnauthenticated
+	}
+	workspaceID, err := id.Parse(firstNonEmpty(claims.ClinicID, claims.Subject))
+	if err != nil {
+		return Principal{}, errx.ErrUnauthenticated
+	}
+	return Principal{UserID: userID, WorkspaceID: workspaceID, Role: role}, nil
 }
 
 func Bearer(header string) string {
@@ -90,4 +106,13 @@ func Bearer(header string) string {
 		return ""
 	}
 	return strings.TrimSpace(header[len(prefix):])
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }

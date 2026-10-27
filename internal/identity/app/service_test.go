@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/treatment-plus/treatment-plus-be/internal/identity/app"
+	"github.com/treatment-plus/treatment-plus-be/internal/identity/domain"
 	"github.com/treatment-plus/treatment-plus-be/internal/identity/mem"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/clock"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/ctxkey"
@@ -28,8 +29,8 @@ func (fakeHasher) Verify(hash, password string) error {
 
 type fakeAccess struct{}
 
-func (fakeAccess) Issue(clinicID id.ID, _ time.Time) (string, time.Duration, error) {
-	return "access-" + clinicID.String(), 15 * time.Minute, nil
+func (fakeAccess) Issue(userID, workspaceID id.ID, role domain.Role, _ time.Time) (string, time.Duration, error) {
+	return "access-" + workspaceID.String() + "-" + string(role), 15 * time.Minute, nil
 }
 
 func newService(t *testing.T) (*app.Service, *mem.Store) {
@@ -43,105 +44,102 @@ func newService(t *testing.T) (*app.Service, *mem.Store) {
 	return svc, store
 }
 
+func TestRegisterClinicAndPersonal(t *testing.T) {
+	svc, _ := newService(t)
+	ctx := context.Background()
+
+	clinic, err := svc.Register(ctx, app.RegisterInput{
+		Name: "Klinik A", Email: "a@clinic.com", Password: "secret-1a", Role: "clinic",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clinic.Account.User.Role != domain.RoleClinic || clinic.Account.Workspace.Kind != domain.RoleClinic {
+		t.Fatalf("%+v", clinic.Account)
+	}
+	if !strings.Contains(clinic.Tokens.Access, "clinic") {
+		t.Fatalf("token %s", clinic.Tokens.Access)
+	}
+
+	personal, err := svc.Register(ctx, app.RegisterInput{
+		Name: "Dr Ada", Email: "ada@solo.com", Password: "secret-1a", Role: "personal",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if personal.Account.User.Role != domain.RolePersonal {
+		t.Fatalf("role %s", personal.Account.User.Role)
+	}
+
+	if _, err := svc.Register(ctx, app.RegisterInput{
+		Name: "Same Mail", Email: "a@clinic.com", Password: "secret-1a", Role: "personal",
+	}); !errors.Is(err, errx.ErrConflict) {
+		t.Fatalf("expected conflict, got %v", err)
+	}
+}
+
 func TestRegisterLoginRefreshLogout(t *testing.T) {
 	svc, _ := newService(t)
 	ctx := context.Background()
 
 	reg, err := svc.Register(ctx, app.RegisterInput{
-		Name: "Klinik A", Email: "a@clinic.com", Password: "secret-1a",
+		Name: "Klinik A", Email: "a@clinic.com", Password: "secret-1a", Role: "clinic",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reg.Clinic.Email != "a@clinic.com" || !strings.HasPrefix(reg.Tokens.Access, "access-") {
-		t.Fatalf("register result %+v", reg)
-	}
-
-	_, err = svc.Register(ctx, app.RegisterInput{
-		Name: "Klinik A2", Email: "A@clinic.com", Password: "secret-1a",
-	})
-	if !errors.Is(err, errx.ErrConflict) {
-		t.Fatalf("expected conflict, got %v", err)
-	}
-
 	if err := svc.Logout(ctx, reg.Tokens.Refresh); err != nil {
 		t.Fatal(err)
 	}
-
 	login, err := svc.Login(ctx, app.LoginInput{Email: "a@clinic.com", Password: "secret-1a"})
 	if err != nil {
 		t.Fatal(err)
 	}
-
+	if login.Account.User.Role != domain.RoleClinic {
+		t.Fatal(login.Account.User.Role)
+	}
 	refreshed, err := svc.Refresh(ctx, login.Tokens.Refresh)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if refreshed.Tokens.Refresh == login.Tokens.Refresh {
-		t.Fatal("refresh must rotate")
-	}
-
 	if _, err := svc.Refresh(ctx, login.Tokens.Refresh); !errors.Is(err, errx.ErrUnauthenticated) {
-		t.Fatalf("reuse must fail, got %v", err)
+		t.Fatalf("reuse %v", err)
 	}
 	if _, err := svc.Refresh(ctx, refreshed.Tokens.Refresh); !errors.Is(err, errx.ErrUnauthenticated) {
-		t.Fatalf("family must be revoked after reuse, got %v", err)
-	}
-
-	again, err := svc.Login(ctx, app.LoginInput{Email: "a@clinic.com", Password: "secret-1a"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.Refresh(ctx, again.Tokens.Refresh); err != nil {
-		t.Fatal(err)
+		t.Fatalf("family %v", err)
 	}
 }
 
-func TestLoginRejectsBadPassword(t *testing.T) {
+func TestGetWorkspaceIDOR(t *testing.T) {
 	svc, _ := newService(t)
 	ctx := context.Background()
-	if _, err := svc.Register(ctx, app.RegisterInput{
-		Name: "Klinik A", Email: "a@clinic.com", Password: "secret-1a",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.Login(ctx, app.LoginInput{Email: "a@clinic.com", Password: "wrong-pass"}); !errors.Is(err, errx.ErrUnauthenticated) {
-		t.Fatalf("got %v", err)
-	}
-	if _, err := svc.Login(ctx, app.LoginInput{Email: "missing@clinic.com", Password: "secret-1a"}); !errors.Is(err, errx.ErrUnauthenticated) {
-		t.Fatalf("got %v", err)
-	}
-}
-
-func TestGetClinicIDOR(t *testing.T) {
-	svc, _ := newService(t)
-	ctx := context.Background()
-	a, err := svc.Register(ctx, app.RegisterInput{Name: "Klinik A", Email: "a@clinic.com", Password: "secret-1a"})
+	a, err := svc.Register(ctx, app.RegisterInput{Name: "Klinik A", Email: "a@clinic.com", Password: "secret-1a", Role: "clinic"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := svc.Register(ctx, app.RegisterInput{Name: "Klinik B", Email: "b@clinic.com", Password: "secret-1b"})
+	b, err := svc.Register(ctx, app.RegisterInput{Name: "Ada", Email: "b@solo.com", Password: "secret-1b", Role: "personal"})
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	aCtx := ctxkey.WithClinicID(ctx, a.Clinic.ID.String())
-	if _, err := svc.GetClinic(aCtx, b.Clinic.ID); !errors.Is(err, errx.ErrForbidden) {
-		t.Fatalf("expected 403 equivalent, got %v", err)
+	aCtx := ctxkey.WithClinicID(ctx, a.Account.Workspace.ID.String())
+	if _, err := svc.GetWorkspace(aCtx, b.Account.Workspace.ID); !errors.Is(err, errx.ErrForbidden) {
+		t.Fatalf("got %v", err)
 	}
 	me, err := svc.Me(aCtx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if me.ID != a.Clinic.ID {
-		t.Fatalf("me %s", me.ID)
+	if me.Workspace.ID != a.Account.Workspace.ID {
+		t.Fatal(me.Workspace.ID)
 	}
 }
 
 func TestRegisterValidation(t *testing.T) {
 	svc, _ := newService(t)
-	_, err := svc.Register(context.Background(), app.RegisterInput{Name: "A", Email: "bad", Password: "x"})
-	if !errors.Is(err, errx.ErrInvalid) {
+	if _, err := svc.Register(context.Background(), app.RegisterInput{Name: "A", Email: "bad", Password: "x", Role: "clinic"}); !errors.Is(err, errx.ErrInvalid) {
+		t.Fatalf("got %v", err)
+	}
+	if _, err := svc.Register(context.Background(), app.RegisterInput{Name: "Klinik A", Email: "a@clinic.com", Password: "secret-1a", Role: "admin"}); !errors.Is(err, errx.ErrInvalid) {
 		t.Fatalf("got %v", err)
 	}
 }

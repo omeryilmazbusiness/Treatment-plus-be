@@ -56,28 +56,28 @@ func TestRLSZeroRowsForOtherClinic(t *testing.T) {
 
 	suffix := id.New().String()
 	a, err := svc.Register(ctx, identityapp.RegisterInput{
-		Name: "Klinik A", Email: "a-" + suffix + "@clinic.com", Password: "secret-1a",
+		Name: "Klinik A", Email: "a-" + suffix + "@clinic.com", Password: "secret-1a", Role: "clinic",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	b, err := svc.Register(ctx, identityapp.RegisterInput{
-		Name: "Klinik B", Email: "b-" + suffix + "@clinic.com", Password: "secret-1b",
+		Name: "Klinik B", Email: "b-" + suffix + "@clinic.com", Password: "secret-1b", Role: "personal",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	aCtx := ctxkey.WithClinicID(ctx, a.Clinic.ID.String())
-	if _, err := store.GetVisible(aCtx, b.Clinic.ID); !errors.Is(err, errx.ErrNotFound) {
+	aCtx := ctxkey.WithClinicID(ctx, a.Account.Workspace.ID.String())
+	if _, err := store.GetVisible(aCtx, b.Account.Workspace.ID); !errors.Is(err, errx.ErrNotFound) {
 		t.Fatalf("A must see 0 rows for B, got %v", err)
 	}
-	if _, err := store.GetVisible(aCtx, a.Clinic.ID); err != nil {
+	if _, err := store.GetVisible(aCtx, a.Account.Workspace.ID); err != nil {
 		t.Fatalf("A must see itself: %v", err)
 	}
 
 	err = pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, "SELECT set_config('app.clinic_id', $1, true)", a.Clinic.ID.UUIDString()); err != nil {
+		if _, err := tx.Exec(ctx, "SELECT set_config('app.clinic_id', $1, true)", a.Account.Workspace.ID.UUIDString()); err != nil {
 			return err
 		}
 		q := dbgen.New(tx)
@@ -88,7 +88,7 @@ func TestRLSZeroRowsForOtherClinic(t *testing.T) {
 		if n != 1 {
 			t.Fatalf("visible clinic count %d", n)
 		}
-		_, err = q.IdentityVisibleClinicID(ctx, uuidFromID(b.Clinic.ID))
+		_, err = q.IdentityVisibleClinicID(ctx, uuidFromID(b.Account.Workspace.ID))
 		if !errors.Is(err, pgx.ErrNoRows) {
 			t.Fatalf("B row must be hidden, got %v", err)
 		}

@@ -33,8 +33,8 @@ func TestJWTIssueAndParse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	clinicID := id.New()
-	raw, ttl, err := j.Issue(clinicID, now)
+	userID, workspaceID := id.New(), id.New()
+	raw, ttl, err := j.Issue(userID, workspaceID, "clinic", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,8 +45,8 @@ func TestJWTIssueAndParse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != clinicID {
-		t.Fatalf("got %s want %s", got, clinicID)
+	if got.UserID != userID || got.WorkspaceID != workspaceID || string(got.Role) != "clinic" {
+		t.Fatalf("got %+v", got)
 	}
 	if _, err := j.ParseAccess("not-a-jwt"); err != errx.ErrUnauthenticated {
 		t.Fatalf("got %v", err)

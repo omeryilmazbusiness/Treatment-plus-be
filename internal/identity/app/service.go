@@ -18,6 +18,7 @@ type RegisterInput struct {
 	Name     string
 	Email    string
 	Password string
+	Role     string
 }
 
 type LoginInput struct {
@@ -25,10 +26,21 @@ type LoginInput struct {
 	Password string
 }
 
-type ClinicView struct {
+type UserView struct {
 	ID    id.ID
-	Name  string
 	Email string
+	Role  domain.Role
+}
+
+type WorkspaceView struct {
+	ID   id.ID
+	Name string
+	Kind domain.Role
+}
+
+type AccountView struct {
+	User      UserView
+	Workspace WorkspaceView
 }
 
 type Tokens struct {
@@ -38,13 +50,13 @@ type Tokens struct {
 }
 
 type AuthResult struct {
-	Clinic ClinicView
-	Tokens Tokens
+	Account AccountView
+	Tokens  Tokens
 }
 
 type Service struct {
-	visible    ClinicReader
-	lookup     ClinicLookup
+	visible    WorkspaceReader
+	lookup     AccountLookup
 	sessions   SessionReader
 	tx         TxRunner
 	hasher     PasswordHasher
@@ -55,8 +67,8 @@ type Service struct {
 }
 
 func NewService(
-	visible ClinicReader,
-	lookup ClinicLookup,
+	visible WorkspaceReader,
+	lookup AccountLookup,
 	sessions SessionReader,
 	tx TxRunner,
 	hasher PasswordHasher,
@@ -88,6 +100,10 @@ func NewService(
 }
 
 func (s *Service) Register(ctx context.Context, in RegisterInput) (AuthResult, error) {
+	role, err := domain.ParseRole(in.Role)
+	if err != nil {
+		return AuthResult{}, err
+	}
 	name, err := domain.NormalizeName(in.Name)
 	if err != nil {
 		return AuthResult{}, err
@@ -112,20 +128,30 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (AuthResult, e
 	}
 
 	now := s.clock.Now()
-	clinic := domain.Clinic{
-		ID:           id.New(),
-		Name:         name,
-		Email:        email,
-		PasswordHash: hash,
-		CreatedAt:    now,
+	userID, workspaceID := id.New(), id.New()
+	account := domain.Account{
+		User: domain.User{
+			ID:           userID,
+			Email:        email,
+			PasswordHash: hash,
+			CreatedAt:    now,
+		},
+		Workspace: domain.Workspace{
+			ID:          workspaceID,
+			OwnerUserID: userID,
+			Name:        name,
+			Kind:        role,
+			CreatedAt:   now,
+		},
+		Role: role,
 	}
-	session, rawRefresh, err := s.newSession(clinic.ID, id.New(), now)
+	session, rawRefresh, err := s.newSession(userID, workspaceID, role, id.New(), now)
 	if err != nil {
 		return AuthResult{}, err
 	}
 
 	err = s.tx.WithinTx(ctx, func(ctx context.Context, tx WriteTx) error {
-		if err := tx.CreateClinic(ctx, clinic); err != nil {
+		if err := tx.CreateAccount(ctx, account); err != nil {
 			return err
 		}
 		return tx.SaveSession(ctx, session)
@@ -133,7 +159,7 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (AuthResult, e
 	if err != nil {
 		return AuthResult{}, err
 	}
-	return s.issue(clinic, rawRefresh, now)
+	return s.issue(account, rawRefresh, now)
 }
 
 func (s *Service) Login(ctx context.Context, in LoginInput) (AuthResult, error) {
@@ -142,7 +168,7 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (AuthResult, error) 
 		return AuthResult{}, err
 	}
 
-	clinic, err := s.lookup.FindByEmail(ctx, email)
+	account, err := s.lookup.FindByEmail(ctx, email)
 	if err != nil {
 		_ = s.hasher.Verify(s.dummyHash, in.Password)
 		if errors.Is(err, errx.ErrNotFound) {
@@ -150,12 +176,12 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (AuthResult, error) 
 		}
 		return AuthResult{}, err
 	}
-	if err := s.hasher.Verify(clinic.PasswordHash, in.Password); err != nil {
+	if err := s.hasher.Verify(account.User.PasswordHash, in.Password); err != nil {
 		return AuthResult{}, errx.ErrUnauthenticated
 	}
 
 	now := s.clock.Now()
-	session, rawRefresh, err := s.newSession(clinic.ID, id.New(), now)
+	session, rawRefresh, err := s.newSession(account.User.ID, account.Workspace.ID, account.Role, id.New(), now)
 	if err != nil {
 		return AuthResult{}, err
 	}
@@ -165,7 +191,7 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (AuthResult, error) 
 	if err != nil {
 		return AuthResult{}, err
 	}
-	return s.issue(clinic, rawRefresh, now)
+	return s.issue(account, rawRefresh, now)
 }
 
 func (s *Service) Refresh(ctx context.Context, rawRefresh string) (AuthResult, error) {
@@ -190,7 +216,7 @@ func (s *Service) Refresh(ctx context.Context, rawRefresh string) (AuthResult, e
 		return AuthResult{}, errx.ErrUnauthenticated
 	}
 
-	next, raw, err := s.newSession(sess.ClinicID, sess.FamilyID, now)
+	next, raw, err := s.newSession(sess.UserID, sess.ClinicID, sess.Role, sess.FamilyID, now)
 	if err != nil {
 		return AuthResult{}, err
 	}
@@ -204,11 +230,11 @@ func (s *Service) Refresh(ctx context.Context, rawRefresh string) (AuthResult, e
 		return AuthResult{}, err
 	}
 
-	clinic, err := s.lookup.FindByID(ctx, sess.ClinicID)
+	account, err := s.lookup.FindByWorkspaceID(ctx, sess.ClinicID)
 	if err != nil {
 		return AuthResult{}, err
 	}
-	return s.issue(clinic, raw, now)
+	return s.issue(account, raw, now)
 }
 
 func (s *Service) Logout(ctx context.Context, rawRefresh string) error {
@@ -227,33 +253,39 @@ func (s *Service) Logout(ctx context.Context, rawRefresh string) error {
 	})
 }
 
-func (s *Service) Me(ctx context.Context) (ClinicView, error) {
-	clinicID, err := clinicFromCtx(ctx)
+func (s *Service) Me(ctx context.Context) (AccountView, error) {
+	workspaceID, err := workspaceFromCtx(ctx)
 	if err != nil {
-		return ClinicView{}, err
+		return AccountView{}, err
 	}
-	return s.GetClinic(ctx, clinicID)
+	return s.GetWorkspace(ctx, workspaceID)
 }
 
-func (s *Service) GetClinic(ctx context.Context, requested id.ID) (ClinicView, error) {
-	actor, err := clinicFromCtx(ctx)
+func (s *Service) GetWorkspace(ctx context.Context, requested id.ID) (AccountView, error) {
+	actor, err := workspaceFromCtx(ctx)
 	if err != nil {
-		return ClinicView{}, err
+		return AccountView{}, err
 	}
 	if actor != requested {
-		return ClinicView{}, errx.ErrForbidden
+		return AccountView{}, errx.ErrForbidden
 	}
-	clinic, err := s.visible.GetVisible(ctx, requested)
+	if _, err := s.visible.GetVisible(ctx, requested); err != nil {
+		if errors.Is(err, errx.ErrNotFound) {
+			return AccountView{}, errx.ErrForbidden
+		}
+		return AccountView{}, err
+	}
+	account, err := s.lookup.FindByWorkspaceID(ctx, requested)
 	if err != nil {
 		if errors.Is(err, errx.ErrNotFound) {
-			return ClinicView{}, errx.ErrForbidden
+			return AccountView{}, errx.ErrForbidden
 		}
-		return ClinicView{}, err
+		return AccountView{}, err
 	}
-	return viewOf(clinic), nil
+	return viewOf(account), nil
 }
 
-func (s *Service) newSession(clinicID, familyID id.ID, now time.Time) (domain.Session, string, error) {
+func (s *Service) newSession(userID, workspaceID id.ID, role domain.Role, familyID id.ID, now time.Time) (domain.Session, string, error) {
 	raw, hash, err := domain.NewRefreshSecret()
 	if err != nil {
 		return domain.Session{}, "", err
@@ -263,7 +295,9 @@ func (s *Service) newSession(clinicID, familyID id.ID, now time.Time) (domain.Se
 	}
 	return domain.Session{
 		ID:          id.New(),
-		ClinicID:    clinicID,
+		UserID:      userID,
+		ClinicID:    workspaceID,
+		Role:        role,
 		RefreshHash: hash,
 		FamilyID:    familyID,
 		ExpiresAt:   now.Add(s.refreshTTL),
@@ -271,13 +305,13 @@ func (s *Service) newSession(clinicID, familyID id.ID, now time.Time) (domain.Se
 	}, raw, nil
 }
 
-func (s *Service) issue(clinic domain.Clinic, rawRefresh string, now time.Time) (AuthResult, error) {
-	access, ttl, err := s.access.Issue(clinic.ID, now)
+func (s *Service) issue(account domain.Account, rawRefresh string, now time.Time) (AuthResult, error) {
+	access, ttl, err := s.access.Issue(account.User.ID, account.Workspace.ID, account.Role, now)
 	if err != nil {
 		return AuthResult{}, err
 	}
 	return AuthResult{
-		Clinic: viewOf(clinic),
+		Account: viewOf(account),
 		Tokens: Tokens{
 			Access:    access,
 			Refresh:   rawRefresh,
@@ -286,11 +320,22 @@ func (s *Service) issue(clinic domain.Clinic, rawRefresh string, now time.Time) 
 	}, nil
 }
 
-func viewOf(c domain.Clinic) ClinicView {
-	return ClinicView{ID: c.ID, Name: c.Name, Email: c.Email}
+func viewOf(a domain.Account) AccountView {
+	return AccountView{
+		User: UserView{
+			ID:    a.User.ID,
+			Email: a.User.Email,
+			Role:  a.Role,
+		},
+		Workspace: WorkspaceView{
+			ID:   a.Workspace.ID,
+			Name: a.Workspace.Name,
+			Kind: a.Workspace.Kind,
+		},
+	}
 }
 
-func clinicFromCtx(ctx context.Context) (id.ID, error) {
+func workspaceFromCtx(ctx context.Context) (id.ID, error) {
 	raw := ctxkey.ClinicID(ctx)
 	if raw == "" {
 		return id.ID{}, errx.ErrUnauthenticated

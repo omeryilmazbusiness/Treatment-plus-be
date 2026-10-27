@@ -1,5 +1,6 @@
 // Package domain is the identity bounded context.
-// The only actor is a clinic account. No staff roles, invites, or patient logins.
+// A user logs in. Their role (clinic | personal) is the authorization key.
+// Each user owns one workspace; RLS still isolates by workspace id (app.clinic_id).
 package domain
 
 import (
@@ -24,17 +25,39 @@ const (
 	RefreshSecretLen = 32
 )
 
-type Clinic struct {
+type User struct {
 	ID           id.ID
-	Name         string
 	Email        string
 	PasswordHash string
 	CreatedAt    time.Time
 }
 
+// Workspace is the tenant. Clinic and personal accounts both get one.
+type Workspace struct {
+	ID          id.ID
+	OwnerUserID id.ID
+	Name        string
+	Kind        Role
+	CreatedAt   time.Time
+}
+
+type Membership struct {
+	UserID      id.ID
+	WorkspaceID id.ID
+	Role        Role
+}
+
+type Account struct {
+	User      User
+	Workspace Workspace
+	Role      Role
+}
+
 type Session struct {
 	ID          id.ID
-	ClinicID    id.ID
+	UserID      id.ID
+	ClinicID    id.ID // workspace tenant; RLS key
+	Role        Role
 	RefreshHash []byte
 	FamilyID    id.ID
 	ReusedAt    *time.Time
@@ -50,7 +73,6 @@ func (s Session) Expired(now time.Time) bool {
 	return !s.ExpiresAt.After(now)
 }
 
-// Usable is the happy path: not reused, not revoked, not expired.
 func (s Session) Usable(now time.Time) error {
 	if s.Revoked() {
 		return errx.ErrUnauthenticated
@@ -68,7 +90,7 @@ func NormalizeName(name string) (string, error) {
 	name = strings.TrimSpace(collapseSpace(name))
 	n := utf8.RuneCountInString(name)
 	if n < NameMinRunes || n > NameMaxRunes {
-		return "", errx.New("invalid_name", "clinic name must be 2–120 characters", errx.ErrInvalid)
+		return "", errx.New("invalid_name", "name must be 2–120 characters", errx.ErrInvalid)
 	}
 	return name, nil
 }

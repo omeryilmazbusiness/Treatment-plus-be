@@ -34,6 +34,7 @@ func (h *Handler) Register(r chi.Router) {
 	})
 	r.Group(func(r chi.Router) {
 		r.Use(h.auth.Require)
+		r.Get("/workspaces/{workspaceID}", h.getWorkspace)
 		r.Get("/clinics/{clinicID}", h.getClinic)
 	})
 }
@@ -42,6 +43,7 @@ type registerRequest struct {
 	Name     string `json:"name"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	Role     string `json:"role"`
 }
 
 type loginRequest struct {
@@ -53,10 +55,16 @@ type refreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-type clinicBody struct {
+type userBody struct {
 	ID    string `json:"id"`
-	Name  string `json:"name"`
 	Email string `json:"email"`
+	Role  string `json:"role"`
+}
+
+type workspaceBody struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Kind string `json:"kind"`
 }
 
 type tokensBody struct {
@@ -67,8 +75,14 @@ type tokensBody struct {
 }
 
 type authResponse struct {
-	Clinic clinicBody `json:"clinic"`
-	Tokens tokensBody `json:"tokens"`
+	User      userBody      `json:"user"`
+	Workspace workspaceBody `json:"workspace"`
+	Tokens    tokensBody    `json:"tokens"`
+}
+
+type meResponse struct {
+	User      userBody      `json:"user"`
+	Workspace workspaceBody `json:"workspace"`
 }
 
 func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
@@ -81,6 +95,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		Name:     req.Name,
 		Email:    req.Email,
 		Password: req.Password,
+		Role:     req.Role,
 	})
 	if err != nil {
 		httpx.WriteError(w, err)
@@ -136,26 +151,35 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, clinicJSON(out))
+	httpx.WriteJSON(w, http.StatusOK, toMe(out))
 }
 
 func (h *Handler) getClinic(w http.ResponseWriter, r *http.Request) {
-	requested, err := id.Parse(chi.URLParam(r, "clinicID"))
+	h.writeWorkspace(w, r, chi.URLParam(r, "clinicID"))
+}
+
+func (h *Handler) getWorkspace(w http.ResponseWriter, r *http.Request) {
+	h.writeWorkspace(w, r, chi.URLParam(r, "workspaceID"))
+}
+
+func (h *Handler) writeWorkspace(w http.ResponseWriter, r *http.Request, rawID string) {
+	requested, err := id.Parse(rawID)
 	if err != nil {
-		httpx.WriteError(w, errx.New("invalid_id", "clinic id is invalid", errx.ErrInvalid))
+		httpx.WriteError(w, errx.New("invalid_id", "workspace id is invalid", errx.ErrInvalid))
 		return
 	}
-	out, err := h.svc.GetClinic(r.Context(), requested)
+	out, err := h.svc.GetWorkspace(r.Context(), requested)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, clinicJSON(out))
+	httpx.WriteJSON(w, http.StatusOK, toMe(out))
 }
 
 func toAuth(out app.AuthResult) authResponse {
 	return authResponse{
-		Clinic: clinicJSON(out.Clinic),
+		User:      userJSON(out.Account),
+		Workspace: workspaceJSON(out.Account),
 		Tokens: tokensBody{
 			AccessToken:  out.Tokens.Access,
 			RefreshToken: out.Tokens.Refresh,
@@ -165,6 +189,14 @@ func toAuth(out app.AuthResult) authResponse {
 	}
 }
 
-func clinicJSON(c app.ClinicView) clinicBody {
-	return clinicBody{ID: c.ID.String(), Name: c.Name, Email: c.Email}
+func toMe(out app.AccountView) meResponse {
+	return meResponse{User: userJSON(out), Workspace: workspaceJSON(out)}
+}
+
+func userJSON(a app.AccountView) userBody {
+	return userBody{ID: a.User.ID.String(), Email: a.User.Email, Role: string(a.User.Role)}
+}
+
+func workspaceJSON(a app.AccountView) workspaceBody {
+	return workspaceBody{ID: a.Workspace.ID.String(), Name: a.Workspace.Name, Kind: string(a.Workspace.Kind)}
 }

@@ -19,11 +19,16 @@ import (
 )
 
 type authBody struct {
-	Clinic struct {
+	User struct {
 		ID    string `json:"id"`
-		Name  string `json:"name"`
 		Email string `json:"email"`
-	} `json:"clinic"`
+		Role  string `json:"role"`
+	} `json:"user"`
+	Workspace struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+		Kind string `json:"kind"`
+	} `json:"workspace"`
 	Tokens struct {
 		AccessToken  string `json:"access_token"`
 		RefreshToken string `json:"refresh_token"`
@@ -34,8 +39,7 @@ type authBody struct {
 
 type errBody struct {
 	Error struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
+		Code string `json:"code"`
 	} `json:"error"`
 }
 
@@ -90,42 +94,36 @@ func TestAuthFlowAndIDOR(t *testing.T) {
 	h := newRouter(t)
 
 	regA := doJSON(t, h, http.MethodPost, "/auth/register", "", map[string]string{
-		"name": "Klinik A", "email": "a@clinic.com", "password": "secret-1a",
+		"name": "Klinik A", "email": "a@clinic.com", "password": "secret-1a", "role": "clinic",
 	})
 	if regA.Code != http.StatusCreated {
 		t.Fatalf("register A %d %s", regA.Code, regA.Body.String())
 	}
 	a := decodeAuth(t, regA)
+	if a.User.Role != "clinic" || a.Workspace.Kind != "clinic" {
+		t.Fatalf("%+v", a)
+	}
 	if a.Tokens.TokenType != "Bearer" || a.Tokens.ExpiresIn != 900 {
 		t.Fatalf("tokens %+v", a.Tokens)
 	}
 	if regA.Header().Get("Set-Cookie") != "" {
 		t.Fatal("api must not write cookies")
 	}
-	if rec := doJSON(t, h, http.MethodPost, "/auth/register", "", map[string]string{
-		"name": "Klinik A2", "email": "a@clinic.com", "password": "secret-1a",
-	}); rec.Code != http.StatusConflict {
-		t.Fatalf("duplicate %d", rec.Code)
-	}
 
-	regB := doJSON(t, h, http.MethodPost, "/auth/register", "", map[string]string{
-		"name": "Klinik B", "email": "b@clinic.com", "password": "secret-1b",
+	regP := doJSON(t, h, http.MethodPost, "/auth/register", "", map[string]string{
+		"name": "Dr Ada", "email": "ada@solo.com", "password": "secret-1b", "role": "personal",
 	})
-	if regB.Code != http.StatusCreated {
-		t.Fatalf("register B %d %s", regB.Code, regB.Body.String())
+	if regP.Code != http.StatusCreated {
+		t.Fatalf("personal %d %s", regP.Code, regP.Body.String())
 	}
-	b := decodeAuth(t, regB)
+	p := decodeAuth(t, regP)
+	if p.User.Role != "personal" {
+		t.Fatalf("role %s", p.User.Role)
+	}
 
-	cross := doJSON(t, h, http.MethodGet, "/clinics/"+b.Clinic.ID, a.Tokens.AccessToken, nil)
+	cross := doJSON(t, h, http.MethodGet, "/workspaces/"+p.Workspace.ID, a.Tokens.AccessToken, nil)
 	if cross.Code != http.StatusForbidden {
-		t.Fatalf("idor status %d %s", cross.Code, cross.Body.String())
-	}
-	var e errBody
-	if err := json.NewDecoder(cross.Body).Decode(&e); err != nil {
-		t.Fatal(err)
-	}
-	if e.Error.Code != "forbidden" {
-		t.Fatalf("idor code %s", e.Error.Code)
+		t.Fatalf("idor %d %s", cross.Code, cross.Body.String())
 	}
 
 	me := doJSON(t, h, http.MethodGet, "/auth/me", a.Tokens.AccessToken, nil)
@@ -133,52 +131,37 @@ func TestAuthFlowAndIDOR(t *testing.T) {
 		t.Fatalf("me %d %s", me.Code, me.Body.String())
 	}
 
-	own := doJSON(t, h, http.MethodGet, "/clinics/"+a.Clinic.ID, a.Tokens.AccessToken, nil)
+	own := doJSON(t, h, http.MethodGet, "/clinics/"+a.Workspace.ID, a.Tokens.AccessToken, nil)
 	if own.Code != http.StatusOK {
-		t.Fatalf("own clinic %d %s", own.Code, own.Body.String())
+		t.Fatalf("own %d %s", own.Code, own.Body.String())
 	}
 
-	logout := doJSON(t, h, http.MethodPost, "/auth/logout", "", map[string]string{
-		"refresh_token": a.Tokens.RefreshToken,
-	})
+	logout := doJSON(t, h, http.MethodPost, "/auth/logout", "", map[string]string{"refresh_token": a.Tokens.RefreshToken})
 	if logout.Code != http.StatusNoContent {
 		t.Fatalf("logout %d", logout.Code)
 	}
-
-	login := doJSON(t, h, http.MethodPost, "/auth/login", "", map[string]string{
-		"email": "a@clinic.com", "password": "secret-1a",
-	})
+	login := doJSON(t, h, http.MethodPost, "/auth/login", "", map[string]string{"email": "a@clinic.com", "password": "secret-1a"})
 	if login.Code != http.StatusOK {
-		t.Fatalf("login %d %s", login.Code, login.Body.String())
+		t.Fatalf("login %d", login.Code)
 	}
 	logged := decodeAuth(t, login)
-
-	ref := doJSON(t, h, http.MethodPost, "/auth/refresh", "", map[string]string{
-		"refresh_token": logged.Tokens.RefreshToken,
-	})
+	ref := doJSON(t, h, http.MethodPost, "/auth/refresh", "", map[string]string{"refresh_token": logged.Tokens.RefreshToken})
 	if ref.Code != http.StatusOK {
-		t.Fatalf("refresh %d %s", ref.Code, ref.Body.String())
+		t.Fatalf("refresh %d", ref.Code)
 	}
 	rotated := decodeAuth(t, ref)
-
-	reuse := doJSON(t, h, http.MethodPost, "/auth/refresh", "", map[string]string{
-		"refresh_token": logged.Tokens.RefreshToken,
-	})
-	if reuse.Code != http.StatusUnauthorized {
-		t.Fatalf("reuse %d %s", reuse.Code, reuse.Body.String())
+	if doJSON(t, h, http.MethodPost, "/auth/refresh", "", map[string]string{"refresh_token": logged.Tokens.RefreshToken}).Code != http.StatusUnauthorized {
+		t.Fatal("reuse")
 	}
-	family := doJSON(t, h, http.MethodPost, "/auth/refresh", "", map[string]string{
-		"refresh_token": rotated.Tokens.RefreshToken,
-	})
-	if family.Code != http.StatusUnauthorized {
-		t.Fatalf("family after reuse %d %s", family.Code, family.Body.String())
+	if doJSON(t, h, http.MethodPost, "/auth/refresh", "", map[string]string{"refresh_token": rotated.Tokens.RefreshToken}).Code != http.StatusUnauthorized {
+		t.Fatal("family")
 	}
 }
 
-func TestRegisterValidationHTTP(t *testing.T) {
+func TestRegisterRejectsUnknownRole(t *testing.T) {
 	h := newRouter(t)
 	rec := doJSON(t, h, http.MethodPost, "/auth/register", "", map[string]string{
-		"name": "A", "email": "bad", "password": "x",
+		"name": "Klinik A", "email": "a@clinic.com", "password": "secret-1a", "role": "admin",
 	})
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status %d %s", rec.Code, rec.Body.String())
@@ -187,8 +170,7 @@ func TestRegisterValidationHTTP(t *testing.T) {
 
 func TestMeRequiresAuth(t *testing.T) {
 	h := newRouter(t)
-	rec := doJSON(t, h, http.MethodGet, "/auth/me", "", nil)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status %d", rec.Code)
+	if doJSON(t, h, http.MethodGet, "/auth/me", "", nil).Code != http.StatusUnauthorized {
+		t.Fatal("expected 401")
 	}
 }

@@ -15,13 +15,14 @@ func (j *JWT) Require(next http.Handler) http.Handler {
 			httpx.WriteError(w, errx.ErrUnauthenticated)
 			return
 		}
-		clinicID, err := j.ParseAccess(raw)
+		principal, err := j.ParseAccess(raw)
 		if err != nil {
 			httpx.WriteError(w, errx.ErrUnauthenticated)
 			return
 		}
-		ctx := ctxkey.WithClinicID(r.Context(), clinicID.String())
-		ctx = ctxkey.WithUserID(ctx, clinicID.String())
+		ctx := ctxkey.WithClinicID(r.Context(), principal.WorkspaceID.String())
+		ctx = ctxkey.WithUserID(ctx, principal.UserID.String())
+		ctx = ctxkey.WithRole(ctx, string(principal.Role))
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

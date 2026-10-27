@@ -22,38 +22,71 @@ func (q *Queries) IdentityCountVisibleClinics(ctx context.Context) (int64, error
 	return n, err
 }
 
-const identityFindClinicByEmail = `-- name: IdentityFindClinicByEmail :one
-SELECT id, name, email, password_hash, created_at, updated_at FROM identity_find_clinic_by_email($1)
+const identityFindAccountByEmail = `-- name: IdentityFindAccountByEmail :one
+SELECT user_id, email, password_hash, user_created_at, workspace_id, workspace_name, workspace_kind, role
+FROM identity_find_account_by_email($1)
 `
 
-func (q *Queries) IdentityFindClinicByEmail(ctx context.Context, email string) (Clinic, error) {
-	row := q.db.QueryRow(ctx, identityFindClinicByEmail, email)
-	var i Clinic
+func (q *Queries) IdentityFindAccountByEmail(ctx context.Context, email string) (IdentityAccountRow, error) {
+	row := q.db.QueryRow(ctx, identityFindAccountByEmail, email)
+	var i IdentityAccountRow
 	err := row.Scan(
-		&i.ID,
-		&i.Name,
+		&i.UserID,
 		&i.Email,
 		&i.PasswordHash,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.UserCreatedAt,
+		&i.WorkspaceID,
+		&i.WorkspaceName,
+		&i.WorkspaceKind,
+		&i.Role,
+	)
+	return i, err
+}
+
+const identityFindAccountByWorkspace = `-- name: IdentityFindAccountByWorkspace :one
+SELECT user_id, email, password_hash, user_created_at, workspace_id, workspace_name, workspace_kind, role
+FROM identity_find_account_by_workspace($1)
+`
+
+func (q *Queries) IdentityFindAccountByWorkspace(ctx context.Context, workspaceID pgtype.UUID) (IdentityAccountRow, error) {
+	row := q.db.QueryRow(ctx, identityFindAccountByWorkspace, workspaceID)
+	var i IdentityAccountRow
+	err := row.Scan(
+		&i.UserID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.UserCreatedAt,
+		&i.WorkspaceID,
+		&i.WorkspaceName,
+		&i.WorkspaceKind,
+		&i.Role,
 	)
 	return i, err
 }
 
 const identityGetClinicByID = `-- name: IdentityGetClinicByID :one
-SELECT id, name, email, password_hash, created_at, updated_at
+SELECT id, name, owner_user_id, kind, created_at, updated_at
 FROM clinics
 WHERE id = $1
 `
 
-func (q *Queries) IdentityGetClinicByID(ctx context.Context, id pgtype.UUID) (Clinic, error) {
+type IdentityGetClinicByIDRow struct {
+	ID          pgtype.UUID        `json:"id"`
+	Name        string             `json:"name"`
+	OwnerUserID pgtype.UUID        `json:"owner_user_id"`
+	Kind        IdentityRole       `json:"kind"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) IdentityGetClinicByID(ctx context.Context, id pgtype.UUID) (IdentityGetClinicByIDRow, error) {
 	row := q.db.QueryRow(ctx, identityGetClinicByID, id)
-	var i Clinic
+	var i IdentityGetClinicByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
-		&i.Email,
-		&i.PasswordHash,
+		&i.OwnerUserID,
+		&i.Kind,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -61,7 +94,7 @@ func (q *Queries) IdentityGetClinicByID(ctx context.Context, id pgtype.UUID) (Cl
 }
 
 const identityGetClinicByIDAuth = `-- name: IdentityGetClinicByIDAuth :one
-SELECT id, name, email, password_hash, created_at, updated_at FROM identity_get_clinic_by_id($1)
+SELECT id, name, created_at, updated_at, owner_user_id, kind FROM identity_get_clinic_by_id($1)
 `
 
 func (q *Queries) IdentityGetClinicByIDAuth(ctx context.Context, id pgtype.UUID) (Clinic, error) {
@@ -70,16 +103,16 @@ func (q *Queries) IdentityGetClinicByIDAuth(ctx context.Context, id pgtype.UUID)
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
-		&i.Email,
-		&i.PasswordHash,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OwnerUserID,
+		&i.Kind,
 	)
 	return i, err
 }
 
 const identityGetSessionByRefreshHash = `-- name: IdentityGetSessionByRefreshHash :one
-SELECT id, clinic_id, refresh_hash, family_id, reused_at, revoked_at, expires_at, created_at FROM identity_get_session_by_refresh_hash($1)
+SELECT id, clinic_id, refresh_hash, family_id, reused_at, revoked_at, expires_at, created_at, user_id, role FROM identity_get_session_by_refresh_hash($1)
 `
 
 func (q *Queries) IdentityGetSessionByRefreshHash(ctx context.Context, refreshHash []byte) (Session, error) {
@@ -94,6 +127,8 @@ func (q *Queries) IdentityGetSessionByRefreshHash(ctx context.Context, refreshHa
 		&i.RevokedAt,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.UserID,
+		&i.Role,
 	)
 	return i, err
 }
@@ -112,34 +147,36 @@ func (q *Queries) IdentityMarkSessionReused(ctx context.Context, arg IdentityMar
 	return err
 }
 
-const identityRegisterClinic = `-- name: IdentityRegisterClinic :one
-SELECT id, name, email, password_hash, created_at, updated_at FROM identity_register_clinic($1, $2, $3, $4)
+const identityRegisterAccount = `-- name: IdentityRegisterAccount :exec
+SELECT identity_register_account(
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+)
 `
 
-type IdentityRegisterClinicParams struct {
-	ID           pgtype.UUID `json:"id"`
-	Name         string      `json:"name"`
-	Email        string      `json:"email"`
-	PasswordHash string      `json:"password_hash"`
+type IdentityRegisterAccountParams struct {
+	UserID       pgtype.UUID  `json:"user_id"`
+	WorkspaceID  pgtype.UUID  `json:"workspace_id"`
+	Name         string       `json:"name"`
+	Email        string       `json:"email"`
+	PasswordHash string       `json:"password_hash"`
+	Role         IdentityRole `json:"role"`
 }
 
-func (q *Queries) IdentityRegisterClinic(ctx context.Context, arg IdentityRegisterClinicParams) (Clinic, error) {
-	row := q.db.QueryRow(ctx, identityRegisterClinic,
-		arg.ID,
+func (q *Queries) IdentityRegisterAccount(ctx context.Context, arg IdentityRegisterAccountParams) error {
+	_, err := q.db.Exec(ctx, identityRegisterAccount,
+		arg.UserID,
+		arg.WorkspaceID,
 		arg.Name,
 		arg.Email,
 		arg.PasswordHash,
+		arg.Role,
 	)
-	var i Clinic
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Email,
-		&i.PasswordHash,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+	return err
 }
 
 const identityRevokeFamily = `-- name: IdentityRevokeFamily :exec
@@ -157,18 +194,22 @@ func (q *Queries) IdentityRevokeFamily(ctx context.Context, arg IdentityRevokeFa
 }
 
 const identitySaveSession = `-- name: IdentitySaveSession :one
-SELECT id, clinic_id, refresh_hash, family_id, reused_at, revoked_at, expires_at, created_at FROM identity_save_session(
+SELECT id, clinic_id, refresh_hash, family_id, reused_at, revoked_at, expires_at, created_at, user_id, role FROM identity_save_session(
     $1,
     $2,
     $3,
     $4,
-    $5
+    $5,
+    $6,
+    $7
 )
 `
 
 type IdentitySaveSessionParams struct {
 	ID          pgtype.UUID        `json:"id"`
+	UserID      pgtype.UUID        `json:"user_id"`
 	ClinicID    pgtype.UUID        `json:"clinic_id"`
+	Role        IdentityRole       `json:"role"`
 	RefreshHash []byte             `json:"refresh_hash"`
 	FamilyID    pgtype.UUID        `json:"family_id"`
 	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
@@ -177,7 +218,9 @@ type IdentitySaveSessionParams struct {
 func (q *Queries) IdentitySaveSession(ctx context.Context, arg IdentitySaveSessionParams) (Session, error) {
 	row := q.db.QueryRow(ctx, identitySaveSession,
 		arg.ID,
+		arg.UserID,
 		arg.ClinicID,
+		arg.Role,
 		arg.RefreshHash,
 		arg.FamilyID,
 		arg.ExpiresAt,
@@ -192,6 +235,8 @@ func (q *Queries) IdentitySaveSession(ctx context.Context, arg IdentitySaveSessi
 		&i.RevokedAt,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.UserID,
+		&i.Role,
 	)
 	return i, err
 }

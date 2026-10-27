@@ -5,16 +5,79 @@
 package dbgen
 
 import (
+	"database/sql/driver"
+	"fmt"
+
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type IdentityRole string
+
+const (
+	IdentityRoleClinic   IdentityRole = "clinic"
+	IdentityRolePersonal IdentityRole = "personal"
+)
+
+func (e *IdentityRole) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = IdentityRole(s)
+	case string:
+		*e = IdentityRole(s)
+	default:
+		return fmt.Errorf("unsupported scan type for IdentityRole: %T", src)
+	}
+	return nil
+}
+
+type NullIdentityRole struct {
+	IdentityRole IdentityRole `json:"identity_role"`
+	Valid        bool         `json:"valid"` // Valid is true if IdentityRole is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullIdentityRole) Scan(value interface{}) error {
+	if value == nil {
+		ns.IdentityRole, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.IdentityRole.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullIdentityRole) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.IdentityRole), nil
+}
+
 type Clinic struct {
-	ID           pgtype.UUID        `json:"id"`
-	Name         string             `json:"name"`
-	Email        string             `json:"email"`
-	PasswordHash string             `json:"password_hash"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ID          pgtype.UUID        `json:"id"`
+	Name        string             `json:"name"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	OwnerUserID pgtype.UUID        `json:"owner_user_id"`
+	Kind        IdentityRole       `json:"kind"`
+}
+
+type IdentityAccountRow struct {
+	UserID        pgtype.UUID        `json:"user_id"`
+	Email         string             `json:"email"`
+	PasswordHash  string             `json:"password_hash"`
+	UserCreatedAt pgtype.Timestamptz `json:"user_created_at"`
+	WorkspaceID   pgtype.UUID        `json:"workspace_id"`
+	WorkspaceName string             `json:"workspace_name"`
+	WorkspaceKind IdentityRole       `json:"workspace_kind"`
+	Role          IdentityRole       `json:"role"`
+}
+
+type Membership struct {
+	UserID      pgtype.UUID        `json:"user_id"`
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	Role        IdentityRole       `json:"role"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
 type Session struct {
@@ -26,4 +89,14 @@ type Session struct {
 	RevokedAt   pgtype.Timestamptz `json:"revoked_at"`
 	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UserID      pgtype.UUID        `json:"user_id"`
+	Role        IdentityRole       `json:"role"`
+}
+
+type User struct {
+	ID           pgtype.UUID        `json:"id"`
+	Email        string             `json:"email"`
+	PasswordHash string             `json:"password_hash"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
