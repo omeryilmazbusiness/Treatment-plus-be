@@ -47,6 +47,14 @@ func NewServer(opts Options) *Server {
 
 	r.Get("/healthz", handleHealthz)
 	r.Get("/readyz", handleReadyz(opts.Ready))
+	r.Get("/workspace", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"products": []map[string]any{
+				{"id": "classic", "open": true},
+				{"id": "ultimate", "open": false},
+			},
+		})
+	})
 
 	r.Route("/v1", func(v1 chi.Router) {
 		for _, reg := range opts.Registrars {

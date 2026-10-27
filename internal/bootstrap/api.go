@@ -12,7 +12,9 @@ import (
 
 	aihttp "github.com/treatment-plus/treatment-plus-be/internal/ai/http"
 	cataloghttp "github.com/treatment-plus/treatment-plus-be/internal/catalog/http"
+	clinicapp "github.com/treatment-plus/treatment-plus-be/internal/clinic/app"
 	clinichttp "github.com/treatment-plus/treatment-plus-be/internal/clinic/http"
+	clinicpg "github.com/treatment-plus/treatment-plus-be/internal/clinic/pg"
 	identityapp "github.com/treatment-plus/treatment-plus-be/internal/identity/app"
 	identityhttp "github.com/treatment-plus/treatment-plus-be/internal/identity/http"
 	identitypg "github.com/treatment-plus/treatment-plus-be/internal/identity/pg"
@@ -77,6 +79,9 @@ func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, err
 		return nil, err
 	}
 
+	clinicStore := clinicpg.New(pool)
+	clinicSvc := clinicapp.NewService(clinicStore)
+
 	srv := httpx.NewServer(httpx.Options{
 		Config: cfg,
 		Log:    log,
@@ -86,7 +91,7 @@ func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, err
 		},
 		Registrars: []httpx.RouteRegistrar{
 			identityhttp.NewHandler(identitySvc, tokens),
-			clinichttp.NewHandler(),
+			clinichttp.NewHandler(clinicSvc, tokens),
 			cataloghttp.NewHandler(),
 			planhttp.NewHandler(),
 			mediahttp.NewHandler(),

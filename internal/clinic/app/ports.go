@@ -7,11 +7,7 @@ import (
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/id"
 )
 
-type ClinicRepository interface {
-	Get(ctx context.Context, id id.ID) (domain.Settings, error)
-}
-
-type BrandStore interface {
-	GetSettings(ctx context.Context, clinicID id.ID) (domain.Settings, error)
+type SettingsStore interface {
+	GetSettings(ctx context.Context, workspaceID id.ID) (domain.Settings, error)
 	SaveSettings(ctx context.Context, settings domain.Settings) error
 }
