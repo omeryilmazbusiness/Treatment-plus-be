@@ -44,11 +44,20 @@ type HTTP struct {
 
 type Database struct {
 	URL             string
+	AppURL          string
 	ReadURL         string
 	MaxConns        int32
 	MinConns        int32
 	MaxConnLifetime time.Duration
 	MaxConnIdleTime time.Duration
+}
+
+// RuntimeURL is the API role. Prefer a non-superuser so FORCE RLS is not bypassed.
+func (d Database) RuntimeURL() string {
+	if d.AppURL != "" {
+		return d.AppURL
+	}
+	return d.URL
 }
 
 type Redis struct {
@@ -59,6 +68,8 @@ type Auth struct {
 	JWTAccessSecret  string
 	JWTRefreshSecret string
 	KMSKey           string
+	AccessTTL        time.Duration
+	RefreshTTL       time.Duration
 }
 
 type Object struct {
@@ -102,6 +113,7 @@ func Load() (Config, error) {
 		},
 		Database: Database{
 			URL:             env("DATABASE_URL", "postgres://treatment:treatment@localhost:5434/treatment_plus?sslmode=disable"),
+			AppURL:          env("DATABASE_APP_URL", ""),
 			ReadURL:         env("DATABASE_RO_URL", ""),
 			MaxConns:        int32(envInt("DB_MAX_CONNS", 20)),
 			MinConns:        int32(envInt("DB_MIN_CONNS", 2)),
@@ -115,6 +127,8 @@ func Load() (Config, error) {
 			JWTAccessSecret:  env("JWT_ACCESS_SECRET", ""),
 			JWTRefreshSecret: env("JWT_REFRESH_SECRET", ""),
 			KMSKey:           env("KMS_KEY", ""),
+			AccessTTL:        envDuration("JWT_ACCESS_TTL", 15*time.Minute),
+			RefreshTTL:       envDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
 		},
 		Object: Object{
 			Endpoint:  env("S3_ENDPOINT", ""),
@@ -138,7 +152,25 @@ func Load() (Config, error) {
 	if cfg.Redis.URL == "" {
 		return Config{}, fmt.Errorf("config: REDIS_URL is required")
 	}
+	if cfg.IsLocal() && cfg.Database.AppURL == "" {
+		cfg.Database.AppURL = "postgres://treatment_app:treatment@localhost:5434/treatment_plus?sslmode=disable"
+	}
+	if err := cfg.Auth.apply(cfg.IsLocal()); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
+}
+
+const LocalJWTAccessSecret = "local-dev-jwt-access-secret-min-32b"
+
+func (a *Auth) apply(local bool) error {
+	if a.JWTAccessSecret == "" && local {
+		a.JWTAccessSecret = LocalJWTAccessSecret
+	}
+	if len(a.JWTAccessSecret) < 32 {
+		return fmt.Errorf("config: JWT_ACCESS_SECRET must be at least 32 bytes")
+	}
+	return nil
 }
 
 func (c Config) IsLocal() bool { return c.App.Env == "local" || c.App.Env == "test" }

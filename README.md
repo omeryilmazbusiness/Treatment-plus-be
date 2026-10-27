@@ -2,7 +2,7 @@
 
 Tedavi Planı Platformu API. Go modular monolith, hexagonal (ports & adapters), SOLID.
 
-Faz 0 iskeleti: health yeşil, migrate çalışır, iş tablosu yok. Kimlik Faz 1’de gelir.
+Task 1: klinik hesabı (tek user tipi). Register / login / refresh / logout / me. Cookie yok.
 
 ## Çalıştırma
 
@@ -13,6 +13,7 @@ make up
 
 - API: `http://localhost:8080/healthz` (proses)
 - Hazır: `http://localhost:8080/readyz` (Postgres + Redis)
+- Auth: `POST /v1/auth/register|login|refresh|logout`, `GET /v1/auth/me`, `GET /v1/clinics/{id}`
 - Local compose: Postgres `localhost:5434`, Redis `localhost:6380` (5432/6379 çakışmasın diye)
 
 Ayrı komutlar:
@@ -61,6 +62,8 @@ Sekiz bounded context. Domain paketi `net/http`, `pgx` veya vendor SDK görmez. 
 ## Env
 
 Zorunlu: `DATABASE_URL`, `REDIS_URL`.
+
+Local API: `DATABASE_APP_URL` (`treatment_app`, NOBYPASSRLS). Migrate owner `DATABASE_URL`. Production tek non-superuser URL yeter.
 
 Sonra: `JWT_*`, `INTERNAL_TOKEN`, `KMS_KEY`, `S3_*`, `OPENAI_*`, `APP_URL`. Sırlar image’a gömülmez; Railway variables.
 

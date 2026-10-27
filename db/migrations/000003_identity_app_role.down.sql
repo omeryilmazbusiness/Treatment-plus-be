@@ -1,0 +1,10 @@
+REVOKE ALL ON FUNCTION identity_revoke_family(uuid, timestamptz) FROM treatment_app;
+REVOKE ALL ON FUNCTION identity_mark_session_reused(uuid, timestamptz) FROM treatment_app;
+REVOKE ALL ON FUNCTION identity_get_session_by_refresh_hash(bytea) FROM treatment_app;
+REVOKE ALL ON FUNCTION identity_save_session(uuid, uuid, bytea, uuid, timestamptz) FROM treatment_app;
+REVOKE ALL ON FUNCTION identity_get_clinic_by_id(uuid) FROM treatment_app;
+REVOKE ALL ON FUNCTION identity_find_clinic_by_email(citext) FROM treatment_app;
+REVOKE ALL ON FUNCTION identity_register_clinic(uuid, text, citext, text) FROM treatment_app;
+REVOKE ALL ON clinics, sessions FROM treatment_app;
+REVOKE USAGE ON SCHEMA public FROM treatment_app;
+DROP ROLE IF EXISTS treatment_app;

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"time"
 
 	"github.com/treatment-plus/treatment-plus-be/internal/identity/domain"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/id"
@@ -9,30 +10,37 @@ import (
 
 // Split readers/writers: no god repository (ISP).
 
-type UserReader interface {
-	GetByID(ctx context.Context, id id.ID) (domain.User, error)
-	FindByEmail(ctx context.Context, email string) (domain.User, error)
+// ClinicReader is tenant-scoped. Postgres applies RLS (0 rows for another clinic).
+type ClinicReader interface {
+	GetVisible(ctx context.Context, id id.ID) (domain.Clinic, error)
 }
 
-type UserWriter interface {
-	Create(ctx context.Context, user domain.User) error
+// ClinicLookup is auth bootstrap (SECURITY DEFINER). Used before a tenant is in context.
+type ClinicLookup interface {
+	FindByEmail(ctx context.Context, email string) (domain.Clinic, error)
+	FindByID(ctx context.Context, id id.ID) (domain.Clinic, error)
 }
 
-type ClinicWriter interface {
-	Create(ctx context.Context, clinic domain.Clinic) error
-}
-
-type MembershipWriter interface {
-	Create(ctx context.Context, m domain.Membership) error
-}
-
-type SessionStore interface {
-	Save(ctx context.Context, session domain.Session) error
+type SessionReader interface {
 	GetByRefreshHash(ctx context.Context, hash []byte) (domain.Session, error)
-	RevokeFamily(ctx context.Context, familyID id.ID) error
+}
+
+type WriteTx interface {
+	CreateClinic(ctx context.Context, clinic domain.Clinic) error
+	SaveSession(ctx context.Context, session domain.Session) error
+	MarkReused(ctx context.Context, sessionID id.ID, at time.Time) error
+	RevokeFamily(ctx context.Context, familyID id.ID, at time.Time) error
+}
+
+type TxRunner interface {
+	WithinTx(ctx context.Context, fn func(ctx context.Context, tx WriteTx) error) error
 }
 
 type PasswordHasher interface {
 	Hash(password string) (string, error)
 	Verify(hash, password string) error
+}
+
+type AccessIssuer interface {
+	Issue(clinicID id.ID, now time.Time) (token string, ttl time.Duration, err error)
 }

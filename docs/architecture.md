@@ -12,4 +12,6 @@ Kaynak: Tedavi Planı Platformu teknik mimari v2.0 (26 Ekim 2026).
 - Cache: hasta sayfasında Redis/CDN yok (PHI).
 - PK: ULIDv2, Postgres’te uuid.
 
-İş tabloları Faz 1’de: `clinics`, `users`, `clinic_members`, `sessions`.
+İş tabloları Task 1: `clinics`, `sessions`. Tek aktör klinik hesabıdır; `users` / `clinic_members` / rol yoktur.
+`clinic_id` body/query’den alınmaz. RLS `SET LOCAL app.clinic_id` (UUID text). Auth bootstrap SECURITY DEFINER + `row_security=off`.
+API `treatment_app` (NOBYPASSRLS) ile bağlanır; migrate owner superuser RLS’i ezer.

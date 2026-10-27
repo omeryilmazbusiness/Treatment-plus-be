@@ -38,6 +38,25 @@ func (id ID) String() string { return ulid.ULID(id).String() }
 
 func (id ID) IsZero() bool { return ulid.ULID(id).Compare(ulid.ULID{}) == 0 }
 
+// UUIDString is the 8-4-4-4-12 hex form used by Postgres uuid / SET LOCAL app.clinic_id.
+func (id ID) UUIDString() string {
+	b := ulid.ULID(id)
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+func (id ID) MarshalText() ([]byte, error) {
+	return []byte(id.String()), nil
+}
+
+func (id *ID) UnmarshalText(b []byte) error {
+	parsed, err := Parse(string(b))
+	if err != nil {
+		return err
+	}
+	*id = parsed
+	return nil
+}
+
 // Bytes returns the 16 raw bytes (PostgreSQL uuid).
 func (id ID) Bytes() []byte {
 	b := ulid.ULID(id)

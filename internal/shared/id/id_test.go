@@ -18,6 +18,9 @@ func TestNewIsUniqueAndParseable(t *testing.T) {
 	if len(a.Bytes()) != 16 {
 		t.Fatalf("bytes len %d", len(a.Bytes()))
 	}
+	if len(a.UUIDString()) != 36 {
+		t.Fatalf("uuid string %q", a.UUIDString())
+	}
 }
 
 func TestParseRejectsGarbage(t *testing.T) {

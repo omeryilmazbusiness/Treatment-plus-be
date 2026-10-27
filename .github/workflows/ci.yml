@@ -8,6 +8,26 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: treatment
+          POSTGRES_PASSWORD: treatment
+          POSTGRES_DB: treatment_plus
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U treatment -d treatment_plus"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgres://treatment:treatment@localhost:5432/treatment_plus?sslmode=disable
+      DATABASE_APP_URL: postgres://treatment_app:treatment@localhost:5432/treatment_plus?sslmode=disable
+      REDIS_URL: redis://localhost:6379/0
+      JWT_ACCESS_SECRET: ci-test-jwt-access-secret-min-32b
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

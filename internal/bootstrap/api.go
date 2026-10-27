@@ -13,15 +13,19 @@ import (
 	aihttp "github.com/treatment-plus/treatment-plus-be/internal/ai/http"
 	cataloghttp "github.com/treatment-plus/treatment-plus-be/internal/catalog/http"
 	clinichttp "github.com/treatment-plus/treatment-plus-be/internal/clinic/http"
+	identityapp "github.com/treatment-plus/treatment-plus-be/internal/identity/app"
 	identityhttp "github.com/treatment-plus/treatment-plus-be/internal/identity/http"
+	identitypg "github.com/treatment-plus/treatment-plus-be/internal/identity/pg"
 	mediahttp "github.com/treatment-plus/treatment-plus-be/internal/media/http"
 	outputhttp "github.com/treatment-plus/treatment-plus-be/internal/output/http"
 	planhttp "github.com/treatment-plus/treatment-plus-be/internal/plan/http"
+	"github.com/treatment-plus/treatment-plus-be/internal/platform/authn"
 	"github.com/treatment-plus/treatment-plus-be/internal/platform/config"
 	"github.com/treatment-plus/treatment-plus-be/internal/platform/httpx"
 	"github.com/treatment-plus/treatment-plus-be/internal/platform/postgres"
 	"github.com/treatment-plus/treatment-plus-be/internal/platform/redisx"
 	sharehttp "github.com/treatment-plus/treatment-plus-be/internal/share/http"
+	"github.com/treatment-plus/treatment-plus-be/internal/shared/clock"
 )
 
 type API struct {
@@ -48,6 +52,31 @@ func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, err
 		return nil, fmt.Errorf("redis: ping: %w", err)
 	}
 
+	clk := clock.System{}
+	tokens, err := authn.NewJWT(cfg.Auth, clk)
+	if err != nil {
+		pool.Close()
+		_ = rdb.Close()
+		return nil, err
+	}
+
+	identityStore := identitypg.New(pool)
+	identitySvc, err := identityapp.NewService(
+		identityStore,
+		identityStore,
+		identityStore,
+		identityStore,
+		authn.DefaultArgon2id(),
+		tokens,
+		clk,
+		cfg.Auth.RefreshTTL,
+	)
+	if err != nil {
+		pool.Close()
+		_ = rdb.Close()
+		return nil, err
+	}
+
 	srv := httpx.NewServer(httpx.Options{
 		Config: cfg,
 		Log:    log,
@@ -56,7 +85,7 @@ func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, err
 			redisx.Checker{Client: rdb},
 		},
 		Registrars: []httpx.RouteRegistrar{
-			identityhttp.NewHandler(),
+			identityhttp.NewHandler(identitySvc, tokens),
 			clinichttp.NewHandler(),
 			cataloghttp.NewHandler(),
 			planhttp.NewHandler(),

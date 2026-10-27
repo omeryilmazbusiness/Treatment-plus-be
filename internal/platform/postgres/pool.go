@@ -11,7 +11,7 @@ import (
 )
 
 func NewPool(ctx context.Context, cfg config.Database) (*pgxpool.Pool, error) {
-	poolCfg, err := pgxpool.ParseConfig(cfg.URL)
+	poolCfg, err := pgxpool.ParseConfig(cfg.RuntimeURL())
 	if err != nil {
 		return nil, fmt.Errorf("postgres: parse url: %w", err)
 	}
