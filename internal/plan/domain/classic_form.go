@@ -73,6 +73,7 @@ func ClassicFormSections() []FormSection {
 				{Name: "visits.healing_note", Label: "İyileşme notu", Type: "string", Required: false, Repeatable: true},
 				{Name: "visits.chart_teeth", Label: "Planlı odontogram dişleri", Type: "string[]", Required: false, Repeatable: true},
 				{Name: "items.treatment_name", Label: "Tedavi adı", Type: "string", Required: true, Repeatable: true},
+				{Name: "items.animation_code", Label: "3D sahne kodu", Type: "string", Required: false, Repeatable: true, Description: "Örn. implant, zirconia_crown. Boşsa tedavi adından çözülür. Katalog: GET /v1/viz/recipes"},
 				{Name: "items.description", Label: "Açıklama", Type: "string", Required: false, Repeatable: true},
 				{Name: "items.teeth", Label: "Dişler", Type: "string[]", Required: false, Repeatable: true},
 				{Name: "items.quantity", Label: "Adet", Type: "integer", Required: true, Repeatable: true},

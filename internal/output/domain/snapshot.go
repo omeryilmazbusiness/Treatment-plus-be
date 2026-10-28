@@ -112,6 +112,7 @@ type Visit struct {
 type Item struct {
 	VisitTitle    string   `json:"visit_title"`
 	TreatmentName string   `json:"treatment_name"`
+	AnimationCode string   `json:"animation_code,omitempty"`
 	ToothNumber   *string  `json:"tooth_number"`
 	Teeth         []string `json:"teeth"`
 	Description   string   `json:"description"`

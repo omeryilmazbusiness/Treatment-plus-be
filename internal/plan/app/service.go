@@ -325,6 +325,7 @@ type PutItemInput struct {
 	VisitID       *string  `json:"visit_id,omitempty"`
 	TreatmentID   *string  `json:"treatment_id,omitempty"`
 	TreatmentName string   `json:"treatment_name"`
+	AnimationCode string   `json:"animation_code,omitempty"`
 	ToothNumber   *string  `json:"tooth_number,omitempty"`
 	Teeth         []string `json:"teeth,omitempty"`
 	Description   string   `json:"description"`
@@ -398,6 +399,11 @@ func (s *Service) PutItems(ctx context.Context, wsID id.ID, planID id.ID, items 
 
 		toothNum, teeth := domain.ItemTeeth(it.ToothNumber, it.Teeth)
 
+		anim := strings.TrimSpace(it.AnimationCode)
+		if anim == "" {
+			anim = treatName
+		}
+
 		domainItems = append(domainItems, domain.Item{
 			ID:            itID,
 			PlanID:        planID,
@@ -405,6 +411,7 @@ func (s *Service) PutItems(ctx context.Context, wsID id.ID, planID id.ID, items 
 			WorkspaceID:   wsID,
 			TreatmentID:   treatID,
 			TreatmentName: treatName,
+			AnimationCode: anim,
 			ToothNumber:   toothNum,
 			Teeth:         teeth,
 			Description:   strings.TrimSpace(it.Description),
@@ -532,6 +539,7 @@ func (s *Service) SetReady(ctx context.Context, wsID id.ID, planID id.ID) (domai
 		itemSnaps = append(itemSnaps, domain.ItemSnapshot{
 			VisitTitle:    vTitle,
 			TreatmentName: it.TreatmentName,
+			AnimationCode: it.AnimationCode,
 			ToothNumber:   it.ToothNumber,
 			Teeth:         it.Teeth,
 			Description:   it.Description,

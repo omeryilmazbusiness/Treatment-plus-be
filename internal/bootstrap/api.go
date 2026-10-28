@@ -29,6 +29,7 @@ import (
 	outputpdf "github.com/treatment-plus/treatment-plus-be/internal/output/pdf"
 	outputpg "github.com/treatment-plus/treatment-plus-be/internal/output/pg"
 	planapp "github.com/treatment-plus/treatment-plus-be/internal/plan/app"
+	plandomain "github.com/treatment-plus/treatment-plus-be/internal/plan/domain"
 	planhttp "github.com/treatment-plus/treatment-plus-be/internal/plan/http"
 	planpg "github.com/treatment-plus/treatment-plus-be/internal/plan/pg"
 	"github.com/treatment-plus/treatment-plus-be/internal/platform/authn"
@@ -39,7 +40,10 @@ import (
 	sharehttp "github.com/treatment-plus/treatment-plus-be/internal/share/http"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/clock"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/crypto"
+	"github.com/treatment-plus/treatment-plus-be/internal/shared/errx"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/id"
+	vizapp "github.com/treatment-plus/treatment-plus-be/internal/viz/app"
+	vizhttp "github.com/treatment-plus/treatment-plus-be/internal/viz/http"
 )
 
 type API struct {
@@ -227,6 +231,7 @@ func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, err
 	mediaSvc := mediaapp.NewService(mediaStore)
 	outputStore := outputpg.New(pool)
 	outputSvc := outputapp.NewService(outputStore, outputpdf.NewRenderer(), mediaSvc, outputStore, outputpdf.AwardJPEG())
+	vizSvc := vizapp.NewService(&planVizAdapter{svc: planSvc})
 
 	srv := httpx.NewServer(httpx.Options{
 		Config: cfg,
@@ -242,12 +247,36 @@ func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, err
 			planhttp.NewHandler(planSvc, tokens),
 			mediahttp.NewHandler(mediaSvc, tokens),
 			outputhttp.NewHandler(outputSvc, tokens),
+			vizhttp.NewHandler(vizSvc, tokens),
 			sharehttp.NewHandler(),
 			aihttp.NewHandler(),
 		},
 	})
 
 	return &API{Server: srv, Pool: pool, Redis: rdb, Log: log}, nil
+}
+
+type planVizAdapter struct {
+	svc *planapp.Service
+}
+
+func (a *planVizAdapter) GetReadyItems(ctx context.Context, workspaceID, planID id.ID) (string, string, []vizapp.ItemRef, error) {
+	p, err := a.svc.GetPlan(ctx, workspaceID, planID)
+	if err != nil {
+		return "", "", nil, err
+	}
+	if p.Status != plandomain.StatusReady {
+		return "", "", nil, errx.New("plan_not_ready", "plan must be ready before 3D playlist", errx.ErrInvalid)
+	}
+	items := make([]vizapp.ItemRef, 0, len(p.Items))
+	for _, it := range p.Items {
+		items = append(items, vizapp.ItemRef{
+			AnimationCode: it.AnimationCode,
+			TreatmentName: it.TreatmentName,
+			Teeth:         it.Teeth,
+		})
+	}
+	return string(p.Locale), p.ID.String(), items, nil
 }
 
 func (a *API) Close() {

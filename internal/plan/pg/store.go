@@ -293,7 +293,7 @@ func (s *Store) GetPlan(ctx context.Context, wsID id.ID, planID id.ID) (domain.P
 		// Items
 		iRows, err := tx.Query(ctx, `
 			SELECT id, plan_id, visit_id, workspace_id, treatment_id, treatment_name,
-			       tooth_number, teeth, description, quantity, unit_price, is_package, order_num, created_at, updated_at
+			       tooth_number, teeth, description, quantity, unit_price, is_package, order_num, animation_code, created_at, updated_at
 			FROM plan_items
 			WHERE workspace_id = $1 AND plan_id = $2
 			ORDER BY order_num ASC
@@ -310,7 +310,7 @@ func (s *Store) GetPlan(ctx context.Context, wsID id.ID, planID id.ID) (domain.P
 			if err := iRows.Scan(
 				&itID, &itPlanID, &itVisitID, &itWsUUID, &itTrID, &it.TreatmentName,
 				&it.ToothNumber, &it.Teeth, &it.Description, &it.Quantity, &it.UnitPrice, &it.IsPackage, &it.OrderNum,
-				&it.CreatedAt, &it.UpdatedAt,
+				&it.AnimationCode, &it.CreatedAt, &it.UpdatedAt,
 			); err != nil {
 				return err
 			}
@@ -480,11 +480,11 @@ func (s *Store) ReplaceItems(ctx context.Context, wsID id.ID, planID id.ID, item
 			_, err := tx.Exec(ctx, `
 				INSERT INTO plan_items (
 					id, plan_id, visit_id, workspace_id, treatment_id, treatment_name,
-					tooth_number, teeth, description, quantity, unit_price, is_package, order_num
-				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+					tooth_number, teeth, description, quantity, unit_price, is_package, order_num, animation_code
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 			`,
 				toUUID(it.ID), toUUID(planID), vUUID, toUUID(wsID), trUUID, it.TreatmentName,
-				it.ToothNumber, teeth, it.Description, it.Quantity, it.UnitPrice, it.IsPackage, it.OrderNum,
+				it.ToothNumber, teeth, it.Description, it.Quantity, it.UnitPrice, it.IsPackage, it.OrderNum, it.AnimationCode,
 			)
 			if err != nil {
 				return err

@@ -7,3 +7,4 @@ tmp/
 vendor/
 .idea/
 .vscode/
+internal/viz/player/static/mouth.glb

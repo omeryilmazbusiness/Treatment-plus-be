@@ -59,6 +59,7 @@ type Item struct {
 	WorkspaceID   id.ID     `json:"workspace_id"`
 	TreatmentID   *id.ID    `json:"treatment_id,omitempty"`
 	TreatmentName string    `json:"treatment_name"`
+	AnimationCode string    `json:"animation_code,omitempty"`
 	ToothNumber   *string   `json:"tooth_number,omitempty"`
 	Teeth         []string  `json:"teeth,omitempty"`
 	Description   string    `json:"description,omitempty"`
@@ -242,6 +243,7 @@ type PatientSnapshot struct {
 type ItemSnapshot struct {
 	VisitTitle    string   `json:"visit_title"`
 	TreatmentName string   `json:"treatment_name"`
+	AnimationCode string   `json:"animation_code,omitempty"`
 	ToothNumber   *string  `json:"tooth_number,omitempty"`
 	Teeth         []string `json:"teeth,omitempty"`
 	Description   string   `json:"description,omitempty"`

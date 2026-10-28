@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: Treatment Plus API
-  version: 0.3.0
-  description: Users authenticate. Role clinic|personal authorizes. Clinic brand is stored once. Each Classic PDF selects palette and locale. Cookies stay on the Next BFF.
+  version: 0.4.0
+  description: Users authenticate. Role clinic|personal authorizes. Clinic brand is stored once. Each Classic PDF selects palette and locale. 3D hamle recipes play on the parametric mouth at GET /v1/viz/player. Cookies stay on the Next BFF.
 servers:
   - url: /v1
 paths:
@@ -305,6 +305,48 @@ paths:
                 type: string
                 format: binary
         "404":
+          $ref: "#/components/responses/Error"
+  /viz/recipes:
+    get:
+      summary: Public catalog of 3D treatment hamle recipes (no PHI)
+      operationId: listVizRecipes
+      responses:
+        "200":
+          description: Recipe library
+  /viz/demo:
+    get:
+      summary: Demo playlist for one or all treatments
+      operationId: vizDemo
+      parameters:
+        - in: query
+          name: code
+          schema: { type: string }
+        - in: query
+          name: teeth
+          schema: { type: string }
+        - in: query
+          name: locale
+          schema: { type: string }
+      responses:
+        "200":
+          description: Playlist
+  /viz/player:
+    get:
+      summary: Three.js interpreter that plays hamle recipes on the 32-tooth mouth
+      operationId: vizPlayer
+      responses:
+        "200":
+          description: HTML player
+  /plans/{id}/viz:
+    get:
+      summary: Authenticated playlist for a ready plan
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Playlist
+        "401":
+          $ref: "#/components/responses/Error"
+        "422":
           $ref: "#/components/responses/Error"
   /media:
     post:
