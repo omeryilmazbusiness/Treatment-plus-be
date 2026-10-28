@@ -3,18 +3,14 @@ package pg_test
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/joho/godotenv"
 
 	catalogapp "github.com/treatment-plus/treatment-plus-be/internal/catalog/app"
 	catalogpg "github.com/treatment-plus/treatment-plus-be/internal/catalog/pg"
 	clinicapp "github.com/treatment-plus/treatment-plus-be/internal/clinic/app"
-	clinicdomain "github.com/treatment-plus/treatment-plus-be/internal/clinic/domain"
 	clinicpg "github.com/treatment-plus/treatment-plus-be/internal/clinic/pg"
 	identityapp "github.com/treatment-plus/treatment-plus-be/internal/identity/app"
 	identitypg "github.com/treatment-plus/treatment-plus-be/internal/identity/pg"
@@ -23,7 +19,7 @@ import (
 	planpg "github.com/treatment-plus/treatment-plus-be/internal/plan/pg"
 	"github.com/treatment-plus/treatment-plus-be/internal/platform/authn"
 	"github.com/treatment-plus/treatment-plus-be/internal/platform/config"
-	"github.com/treatment-plus/treatment-plus-be/internal/platform/postgres"
+	"github.com/treatment-plus/treatment-plus-be/internal/platform/postgres/pgtest"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/clock"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/crypto"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/ctxkey"
@@ -31,19 +27,6 @@ import (
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/id"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/money"
 )
-
-func init() {
-	wd, _ := os.Getwd()
-	dir := wd
-	for i := 0; i < 6; i++ {
-		candidate := filepath.Join(dir, ".env")
-		if _, err := os.Stat(candidate); err == nil {
-			_ = godotenv.Load(candidate)
-			break
-		}
-		dir = filepath.Dir(dir)
-	}
-}
 
 type testCatalogAdapter struct {
 	svc *catalogapp.Service
@@ -67,26 +50,20 @@ func (c *testSettingsAdapter) GetClinicSettings(ctx context.Context, wsID id.ID)
 		return planapp.ClinicSettingsDTO{}, err
 	}
 	return planapp.ClinicSettingsDTO{
-		Name:    st.Name,
-		Phone:   st.Phone,
-		Palette: string(st.Palette),
-		LogoKey: st.LogoKey,
-		Intro:   st.Intro,
-		Legal:   st.Legal,
+		Name:     st.Name,
+		Phone:    st.Phone,
+		Palette:  string(st.Palette),
+		LogoKey:  st.LogoKey,
+		Intro:    st.Intro,
+		Legal:    st.Legal,
+		Locale:   string(st.Locale),
+		Currency: string(st.Currency),
 	}, nil
 }
 
 func TestPlan_FullLifecycleAndTenantIsolation(t *testing.T) {
 	ctx := context.Background()
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	pool, err := postgres.NewPool(ctx, cfg.Database)
-	if err != nil {
-		t.Skipf("postgres pool not available: %v", err)
-	}
-	t.Cleanup(pool.Close)
+	pool := pgtest.Open(t)
 
 	clk := clock.System{}
 	tokens, err := authn.NewJWT(config.Auth{
@@ -98,7 +75,7 @@ func TestPlan_FullLifecycleAndTenantIsolation(t *testing.T) {
 	}
 
 	idStore := identitypg.New(pool)
-	idSvc, err := identityapp.NewService(idStore, idStore, idStore, idStore, authn.FastArgon2id(), tokens, clk, time.Hour)
+	idSvc, err := identityapp.NewService(idStore, idStore, idStore, idStore, authn.FastArgon2id(), tokens, clk, time.Hour, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,12 +83,14 @@ func TestPlan_FullLifecycleAndTenantIsolation(t *testing.T) {
 	suffix := id.New().String()
 	regA, err := idSvc.Register(ctx, identityapp.RegisterInput{
 		Name: "Klinik Alpha", Email: "alpha-" + suffix + "@test.com", Password: "password123", Role: "clinic",
+		Clinic: identityapp.RequiredClinic("+90 532 000 1122"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	regB, err := idSvc.Register(ctx, identityapp.RegisterInput{
 		Name: "Klinik Beta", Email: "beta-" + suffix + "@test.com", Password: "password123", Role: "clinic",
+		Clinic: identityapp.RequiredClinic("+90 532 000 3344"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -125,12 +104,14 @@ func TestPlan_FullLifecycleAndTenantIsolation(t *testing.T) {
 	// Services setup
 	clinicStore := clinicpg.New(pool)
 	clinicSvc := clinicapp.NewService(clinicStore)
-	_ = clinicStore.SaveSettings(ctxA, clinicdomain.Settings{
-		WorkspaceID: wsAID,
-		Name:        "Alpha Diş Kliniği",
-		Phone:       "+90 532 000 1122",
-		Palette:     clinicdomain.PaletteNavy,
-	})
+	name := "Alpha Diş Kliniği"
+	phone := "+90 532 000 1122"
+	if _, err := clinicSvc.UpdateSettings(ctxA, wsAID, clinicapp.UpdateSettingsInput{
+		Name:  &name,
+		Phone: &phone,
+	}); err != nil {
+		t.Fatalf("save clinic settings: %v", err)
+	}
 
 	catalogStore := catalogpg.New(pool)
 	catalogSvc := catalogapp.NewService(catalogStore)

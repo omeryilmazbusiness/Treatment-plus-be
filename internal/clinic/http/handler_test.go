@@ -151,15 +151,20 @@ func TestSettings_PatchAndGetSameValues(t *testing.T) {
 	token := issueToken(t, jwtAuth, userA, wsA)
 
 	patchBody := map[string]any{
-		"name":      "Örnek Klinik",
-		"locale":    "en",
-		"currency":  "EUR",
-		"palette":   "forest",
-		"logo_key":  "https://cdn.example.com/logo.png",
-		"phone":     "+90 212 555 0101",
-		"map_url":   "https://maps.google.com/?q=acme",
-		"intro":     "Uzman kadromuzla yanınızdayız.",
-		"legal":     "KVKK kapsamında onaylanmıştır.",
+		"name":        "Örnek Klinik",
+		"locale":      "en",
+		"currency":    "EUR",
+		"palette":     "forest",
+		"logo_key":    "https://cdn.example.com/logo.png",
+		"phone":       "+90 212 555 0101",
+		"map_url":     "https://maps.google.com/?q=acme",
+		"intro":       "Uzman kadromuzla yanınızdayız.",
+		"legal":       "KVKK kapsamında onaylanmıştır.",
+		"slogan":      "Every Smile Matters",
+		"email":       "info@ornek.com",
+		"address":     "Bağdat Cad. No:1",
+		"hours":       "09:00-18:00",
+		"signer_name": "Dr. Ada",
 	}
 	b, _ := json.Marshal(patchBody)
 	patchReq := httptest.NewRequest(http.MethodPatch, "/v1/clinic/settings", bytes.NewReader(b))
@@ -193,7 +198,7 @@ func TestSettings_PatchAndGetSameValues(t *testing.T) {
 	}
 
 	// Verify PATCH and GET return identical values
-	fields := []string{"name", "locale", "currency", "palette", "logo_key", "phone", "map_url", "intro", "legal"}
+	fields := []string{"name", "locale", "currency", "palette", "logo_key", "phone", "map_url", "intro", "legal", "slogan", "email", "address", "hours", "signer_name"}
 	for _, f := range fields {
 		if getRes[f] != patchBody[f] {
 			t.Errorf("field %s mismatch: got %v, want %v", f, getRes[f], patchBody[f])

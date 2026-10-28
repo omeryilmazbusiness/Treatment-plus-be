@@ -1,2 +1,2 @@
-// Package app holds output queries. Phase 5 web, Phase 7 PDF. No mutations.
+// Package app holds Classic PDF generate/get use-cases. Output never mutates a plan.
 package app

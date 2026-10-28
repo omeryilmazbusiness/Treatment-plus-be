@@ -40,3 +40,80 @@ type PasswordHasher interface {
 type AccessIssuer interface {
 	Issue(userID, workspaceID id.ID, role domain.Role, now time.Time) (token string, ttl time.Duration, err error)
 }
+
+// ClinicProfile is the one-time PDF brand block. Identity does not own clinic tables.
+type ClinicStat struct {
+	Value string
+	Label string
+}
+
+type ClinicDoctor struct {
+	Name, Title, Subtitle, Bio, PhotoKey string
+	Stats                                []ClinicStat
+}
+
+type ClinicLab struct {
+	Title, Text, ImageKey string
+	Stats                 []ClinicStat
+}
+
+type ClinicAwards struct {
+	Text      string
+	BadgeKeys []string
+}
+
+type ClinicHotel struct {
+	Name, Text, ImageKey string
+}
+
+type ClinicProfile struct {
+	Name         string
+	Slogan       string
+	Phone        string
+	Email        string
+	Website      string
+	Address      string
+	Hours        string
+	Locale       string
+	Currency     string
+	Palette      string
+	LogoKey      string
+	CoverKey     string
+	MapURL       string
+	Intro        string
+	Legal        string
+	AboutText    string
+	AboutKey     string
+	WelcomeBody  string
+	SignerName   string
+	SignerTitle  string
+	Highlights   []ClinicStat
+	Doctor       ClinicDoctor
+	Lab          ClinicLab
+	Awards       ClinicAwards
+	Hotel        ClinicHotel
+	RequireBrand bool
+}
+
+// RequiredClinic is the minimum Wise contact + welcome block collected at clinic register.
+func RequiredClinic(phone string) ClinicProfile {
+	return ClinicProfile{
+		Phone:       phone,
+		Email:       "info@clinic.test",
+		Address:     "Test Cad. No:1",
+		Hours:       "09:00-18:00",
+		Slogan:      "Every Smile Matters",
+		SignerName:  "Dr. Test",
+		SignerTitle: "Klinik Direktörü",
+	}
+}
+
+type ProfileProvisioner interface {
+	Provision(ctx context.Context, workspaceID id.ID, profile ClinicProfile) error
+}
+
+type ProfileFunc func(ctx context.Context, workspaceID id.ID, profile ClinicProfile) error
+
+func (f ProfileFunc) Provision(ctx context.Context, workspaceID id.ID, profile ClinicProfile) error {
+	return f(ctx, workspaceID, profile)
+}

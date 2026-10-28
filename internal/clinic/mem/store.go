@@ -38,6 +38,9 @@ func (s *Store) GetSettings(ctx context.Context, workspaceID id.ID) (domain.Sett
 }
 
 func (s *Store) SaveSettings(ctx context.Context, settings domain.Settings) error {
+	if err := settings.Validate(); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

@@ -54,7 +54,7 @@ func newRouter(t *testing.T) http.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := identityapp.NewService(store, store, store, store, authn.FastArgon2id(), tokens, clk, 7*24*time.Hour)
+	svc, err := identityapp.NewService(store, store, store, store, authn.FastArgon2id(), tokens, clk, 7*24*time.Hour, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,8 +93,13 @@ func decodeAuth(t *testing.T, rec *httptest.ResponseRecorder) authBody {
 func TestAuthFlowAndIDOR(t *testing.T) {
 	h := newRouter(t)
 
-	regA := doJSON(t, h, http.MethodPost, "/auth/register", "", map[string]string{
+	regA := doJSON(t, h, http.MethodPost, "/auth/register", "", map[string]any{
 		"name": "Klinik A", "email": "a@clinic.com", "password": "secret-1a", "role": "clinic",
+		"clinic": map[string]string{
+			"phone": "+90 555 111 2233", "email": "info@a-clinic.com", "address": "Bağdat Cad. No:1",
+			"hours": "09:00-18:00", "slogan": "Every Smile Matters", "signer_name": "Dr. Ada",
+			"locale": "tr", "currency": "TRY", "palette": "navy",
+		},
 	})
 	if regA.Code != http.StatusCreated {
 		t.Fatalf("register A %d %s", regA.Code, regA.Body.String())
@@ -155,6 +160,16 @@ func TestAuthFlowAndIDOR(t *testing.T) {
 	}
 	if doJSON(t, h, http.MethodPost, "/auth/refresh", "", map[string]string{"refresh_token": rotated.Tokens.RefreshToken}).Code != http.StatusUnauthorized {
 		t.Fatal("family")
+	}
+}
+
+func TestRegisterClinicRequiresPhone(t *testing.T) {
+	h := newRouter(t)
+	rec := doJSON(t, h, http.MethodPost, "/auth/register", "", map[string]string{
+		"name": "Klinik A", "email": "a@clinic.com", "password": "secret-1a", "role": "clinic",
+	})
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status %d %s", rec.Code, rec.Body.String())
 	}
 }
 

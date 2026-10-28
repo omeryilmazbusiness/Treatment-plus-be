@@ -15,13 +15,19 @@ import (
 	cataloghttp "github.com/treatment-plus/treatment-plus-be/internal/catalog/http"
 	catalogpg "github.com/treatment-plus/treatment-plus-be/internal/catalog/pg"
 	clinicapp "github.com/treatment-plus/treatment-plus-be/internal/clinic/app"
+	clinicdomain "github.com/treatment-plus/treatment-plus-be/internal/clinic/domain"
 	clinichttp "github.com/treatment-plus/treatment-plus-be/internal/clinic/http"
 	clinicpg "github.com/treatment-plus/treatment-plus-be/internal/clinic/pg"
 	identityapp "github.com/treatment-plus/treatment-plus-be/internal/identity/app"
 	identityhttp "github.com/treatment-plus/treatment-plus-be/internal/identity/http"
 	identitypg "github.com/treatment-plus/treatment-plus-be/internal/identity/pg"
+	mediaapp "github.com/treatment-plus/treatment-plus-be/internal/media/app"
 	mediahttp "github.com/treatment-plus/treatment-plus-be/internal/media/http"
+	mediapg "github.com/treatment-plus/treatment-plus-be/internal/media/pg"
+	outputapp "github.com/treatment-plus/treatment-plus-be/internal/output/app"
 	outputhttp "github.com/treatment-plus/treatment-plus-be/internal/output/http"
+	outputpdf "github.com/treatment-plus/treatment-plus-be/internal/output/pdf"
+	outputpg "github.com/treatment-plus/treatment-plus-be/internal/output/pg"
 	planapp "github.com/treatment-plus/treatment-plus-be/internal/plan/app"
 	planhttp "github.com/treatment-plus/treatment-plus-be/internal/plan/http"
 	planpg "github.com/treatment-plus/treatment-plus-be/internal/plan/pg"
@@ -65,13 +71,97 @@ func (c *clinicSettingsAdapter) GetClinicSettings(ctx context.Context, wsID id.I
 		return planapp.ClinicSettingsDTO{}, err
 	}
 	return planapp.ClinicSettingsDTO{
-		Name:    st.Name,
-		Phone:   st.Phone,
-		Palette: string(st.Palette),
-		LogoKey: st.LogoKey,
-		Intro:   st.Intro,
-		Legal:   st.Legal,
+		Name:        st.Name,
+		Slogan:      st.Slogan,
+		Phone:       st.Phone,
+		Email:       st.Email,
+		Website:     st.Website,
+		Address:     st.Address,
+		Hours:       st.Hours,
+		Palette:     string(st.Palette),
+		Locale:      string(st.Locale),
+		Currency:    string(st.Currency),
+		LogoKey:     st.LogoKey,
+		CoverKey:    st.CoverKey,
+		MapURL:      st.MapURL,
+		Intro:       st.Intro,
+		Legal:       st.Legal,
+		AboutText:   st.AboutText,
+		AboutKey:    st.AboutKey,
+		WelcomeBody: st.WelcomeBody,
+		SignerName:  st.SignerName,
+		SignerTitle: st.SignerTitle,
+		Highlights:  toPlanStats(st.Highlights),
+		Doctor:      toPlanDoctor(st.Doctor),
+		Lab:         toPlanLab(st.Lab),
+		Awards:      planapp.ClinicAwardsDTO{Text: st.Awards.Text, BadgeKeys: st.Awards.BadgeKeys},
+		Hotel:       planapp.ClinicHotelDTO{Name: st.Hotel.Name, Text: st.Hotel.Text, ImageKey: st.Hotel.ImageKey},
 	}, nil
+}
+
+func toPlanStats(in []clinicdomain.Stat) []planapp.ClinicStatDTO {
+	var out []planapp.ClinicStatDTO
+	for _, s := range in {
+		out = append(out, planapp.ClinicStatDTO{Value: s.Value, Label: s.Label})
+	}
+	return out
+}
+
+func toPlanDoctor(d clinicdomain.Doctor) planapp.ClinicDoctorDTO {
+	return planapp.ClinicDoctorDTO{
+		Name: d.Name, Title: d.Title, Subtitle: d.Subtitle, Bio: d.Bio, PhotoKey: d.PhotoKey, Stats: toPlanStats(d.Stats),
+	}
+}
+
+func toPlanLab(l clinicdomain.Lab) planapp.ClinicLabDTO {
+	return planapp.ClinicLabDTO{Title: l.Title, Text: l.Text, ImageKey: l.ImageKey, Stats: toPlanStats(l.Stats)}
+}
+
+func toClinicStats(in []identityapp.ClinicStat) []clinicdomain.Stat {
+	var out []clinicdomain.Stat
+	for _, s := range in {
+		out = append(out, clinicdomain.Stat{Value: s.Value, Label: s.Label})
+	}
+	return out
+}
+
+func provisionClinic(svc *clinicapp.Service) identityapp.ProfileFunc {
+	return func(ctx context.Context, wsID id.ID, profile identityapp.ClinicProfile) error {
+		_, err := svc.Onboard(ctx, wsID, clinicapp.OnboardInput{
+			Name:        profile.Name,
+			Slogan:      profile.Slogan,
+			Phone:       profile.Phone,
+			Email:       profile.Email,
+			Website:     profile.Website,
+			Address:     profile.Address,
+			Hours:       profile.Hours,
+			Locale:      profile.Locale,
+			Currency:    profile.Currency,
+			Palette:     profile.Palette,
+			LogoKey:     profile.LogoKey,
+			CoverKey:    profile.CoverKey,
+			MapURL:      profile.MapURL,
+			Intro:       profile.Intro,
+			Legal:       profile.Legal,
+			AboutText:   profile.AboutText,
+			AboutKey:    profile.AboutKey,
+			WelcomeBody: profile.WelcomeBody,
+			SignerName:  profile.SignerName,
+			SignerTitle: profile.SignerTitle,
+			Highlights:  toClinicStats(profile.Highlights),
+			Doctor: clinicdomain.Doctor{
+				Name: profile.Doctor.Name, Title: profile.Doctor.Title, Subtitle: profile.Doctor.Subtitle,
+				Bio: profile.Doctor.Bio, PhotoKey: profile.Doctor.PhotoKey, Stats: toClinicStats(profile.Doctor.Stats),
+			},
+			Lab: clinicdomain.Lab{
+				Title: profile.Lab.Title, Text: profile.Lab.Text, ImageKey: profile.Lab.ImageKey, Stats: toClinicStats(profile.Lab.Stats),
+			},
+			Awards:       clinicdomain.Awards{Text: profile.Awards.Text, BadgeKeys: profile.Awards.BadgeKeys},
+			Hotel:        clinicdomain.Hotel{Name: profile.Hotel.Name, Text: profile.Hotel.Text, ImageKey: profile.Hotel.ImageKey},
+			RequireBrand: profile.RequireBrand,
+		})
+		return err
+	}
 }
 
 func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, error) {
@@ -100,6 +190,9 @@ func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, err
 	}
 
 	identityStore := identitypg.New(pool)
+	clinicStore := clinicpg.New(pool)
+	clinicSvc := clinicapp.NewService(clinicStore)
+
 	identitySvc, err := identityapp.NewService(
 		identityStore,
 		identityStore,
@@ -109,15 +202,13 @@ func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, err
 		tokens,
 		clk,
 		cfg.Auth.RefreshTTL,
+		provisionClinic(clinicSvc),
 	)
 	if err != nil {
 		pool.Close()
 		_ = rdb.Close()
 		return nil, err
 	}
-
-	clinicStore := clinicpg.New(pool)
-	clinicSvc := clinicapp.NewService(clinicStore)
 
 	catalogStore := catalogpg.New(pool)
 	catalogSvc := catalogapp.NewService(catalogStore)
@@ -132,6 +223,11 @@ func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, err
 		encrypter,
 	)
 
+	mediaStore := mediapg.New(pool)
+	mediaSvc := mediaapp.NewService(mediaStore)
+	outputStore := outputpg.New(pool)
+	outputSvc := outputapp.NewService(outputStore, outputpdf.NewRenderer(), mediaSvc, outputStore, outputpdf.AwardJPEG())
+
 	srv := httpx.NewServer(httpx.Options{
 		Config: cfg,
 		Log:    log,
@@ -144,8 +240,8 @@ func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, err
 			clinichttp.NewHandler(clinicSvc, tokens),
 			cataloghttp.NewHandler(catalogSvc, tokens),
 			planhttp.NewHandler(planSvc, tokens),
-			mediahttp.NewHandler(),
-			outputhttp.NewHandler(),
+			mediahttp.NewHandler(mediaSvc, tokens),
+			outputhttp.NewHandler(outputSvc, tokens),
 			sharehttp.NewHandler(),
 			aihttp.NewHandler(),
 		},

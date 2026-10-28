@@ -12,5 +12,25 @@ type PlanReader interface {
 }
 
 type PDFRenderer interface {
-	Render(ctx context.Context, view domain.PlanView) ([]byte, error)
+	Render(ctx context.Context, snap domain.Snapshot, images Images) (pdf []byte, pages int, err error)
+}
+
+type Images struct {
+	Logo   []byte
+	Cover  []byte
+	About  []byte
+	Doctor []byte
+	Xray   []byte
+	Lab    []byte
+	Hotel  []byte
+	Award  []byte
+}
+
+type AssetResolver interface {
+	Resolve(ctx context.Context, workspaceID id.ID, key string) ([]byte, error)
+}
+
+type DocumentStore interface {
+	SaveDocument(ctx context.Context, doc domain.Document) error
+	GetDocument(ctx context.Context, workspaceID, planID id.ID) (domain.Document, error)
 }

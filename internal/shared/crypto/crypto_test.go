@@ -6,6 +6,15 @@ import (
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/crypto"
 )
 
+func TestAESGCM_RequiresKey(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic for empty KMS key")
+		}
+	}()
+	_ = crypto.NewAESGCM("")
+}
+
 func TestAESGCM_EncryptDecrypt(t *testing.T) {
 	enc := crypto.NewAESGCM("my-super-secret-key-12345")
 
@@ -28,7 +37,7 @@ func TestAESGCM_EncryptDecrypt(t *testing.T) {
 }
 
 func TestAESGCM_Empty(t *testing.T) {
-	enc := crypto.NewAESGCM("")
+	enc := crypto.NewAESGCM("test-kms-key-must-be-present-32b")
 	cipher, err := enc.Encrypt("")
 	if err != nil || cipher != "" {
 		t.Fatalf("Expected empty, got %q, err=%v", cipher, err)

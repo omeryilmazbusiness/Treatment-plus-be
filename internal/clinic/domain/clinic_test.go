@@ -118,6 +118,41 @@ func TestAvailableProducts(t *testing.T) {
 	}
 }
 
+func TestOnboardRequiresClinicBrand(t *testing.T) {
+	wsID := id.New()
+	_, err := domain.Onboard(wsID, domain.OnboardInput{Name: "Klinik", RequireBrand: true})
+	if err == nil || !errors.Is(err, errx.ErrInvalid) {
+		t.Fatalf("expected brand required, got %v", err)
+	}
+	got, err := domain.Onboard(wsID, domain.OnboardInput{
+		Name: "Klinik", Slogan: "Every Smile Matters", Phone: "+90 555 111 2233",
+		Email: "info@klinik.test", Address: "Bağdat Cad. No:1", Hours: "09:00-18:00",
+		SignerName: "Dr. Ada", Locale: "en", Currency: "EUR", Palette: "rose",
+		LogoKey: "logo/a", RequireBrand: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Phone != "+90 555 111 2233" || got.Locale != domain.LocaleEN || got.LogoKey != "logo/a" || got.SignerName != "Dr. Ada" {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestSettingsValidate(t *testing.T) {
+	wsID := id.New()
+	if err := domain.DefaultSettings(wsID, "Klinik").Validate(); err != nil {
+		t.Fatalf("defaults must be valid: %v", err)
+	}
+	bad := domain.Settings{WorkspaceID: wsID, Locale: "fr", Currency: money.TRY, Palette: domain.PaletteNavy}
+	if err := bad.Validate(); err == nil || !errors.Is(err, errx.ErrInvalid) {
+		t.Fatalf("expected invalid locale, got %v", err)
+	}
+	empty := domain.Settings{}
+	if err := empty.Validate(); err == nil || !errors.Is(err, errx.ErrInvalid) {
+		t.Fatalf("expected invalid workspace, got %v", err)
+	}
+}
+
 func TestDefaultSettings(t *testing.T) {
 	wsID := id.New()
 	s := domain.DefaultSettings(wsID, "Test Clinic")

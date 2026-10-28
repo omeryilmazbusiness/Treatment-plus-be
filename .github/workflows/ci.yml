@@ -28,11 +28,14 @@ jobs:
       DATABASE_APP_URL: postgres://treatment_app:treatment@localhost:5432/treatment_plus?sslmode=disable
       REDIS_URL: redis://localhost:6379/0
       JWT_ACCESS_SECRET: ci-test-jwt-access-secret-min-32b
+      KMS_KEY: ci-test-kms-key-must-be-at-least-32b
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26.x"
+      - name: migrate
+        run: go run ./cmd/migrate -command=up
       - name: vet
         run: go vet ./...
       - name: test

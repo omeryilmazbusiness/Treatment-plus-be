@@ -1,0 +1,17 @@
+ALTER TABLE clinic_settings
+    DROP COLUMN IF EXISTS slogan,
+    DROP COLUMN IF EXISTS email,
+    DROP COLUMN IF EXISTS website,
+    DROP COLUMN IF EXISTS address,
+    DROP COLUMN IF EXISTS hours,
+    DROP COLUMN IF EXISTS cover_image_key,
+    DROP COLUMN IF EXISTS about_image_key,
+    DROP COLUMN IF EXISTS about_text,
+    DROP COLUMN IF EXISTS welcome_body,
+    DROP COLUMN IF EXISTS signer_name,
+    DROP COLUMN IF EXISTS signer_title,
+    DROP COLUMN IF EXISTS highlights_json,
+    DROP COLUMN IF EXISTS doctor_json,
+    DROP COLUMN IF EXISTS lab_json,
+    DROP COLUMN IF EXISTS awards_json,
+    DROP COLUMN IF EXISTS hotel_json;

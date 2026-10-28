@@ -6,6 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/treatment-plus/treatment-plus-be/internal/plan/app"
+	"github.com/treatment-plus/treatment-plus-be/internal/plan/domain"
 	"github.com/treatment-plus/treatment-plus-be/internal/platform/authn"
 	"github.com/treatment-plus/treatment-plus-be/internal/platform/httpx"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/ctxkey"
@@ -32,6 +33,10 @@ func (h *Handler) Register(r chi.Router) {
 		r.Post("/patients", h.createPatient)
 		r.Get("/patients/{id}", h.getPatient)
 		r.Patch("/patients/{id}", h.patchPatient)
+
+		// Classic form — static clinic brand is read-only; only plan fields are collected.
+		r.Get("/plans/classic/form", h.classicForm)
+		r.Post("/plans/classic", h.createClassic)
 
 		// Plans
 		r.Get("/plans", h.listPlans)
@@ -155,11 +160,69 @@ func (h *Handler) listPlans(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"plans": list})
 }
 
+func (h *Handler) classicForm(w http.ResponseWriter, r *http.Request) {
+	wsID, err := h.getWorkspaceID(r)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	form, err := h.svc.ClassicForm(r.Context(), wsID)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, form)
+}
+
+type classicPlanRequest struct {
+	Palette   string                 `json:"palette"`
+	Locale    string                 `json:"locale"`
+	Patient   createPatientRequest   `json:"patient"`
+	Title     string                 `json:"title"`
+	Diagnoses []string               `json:"diagnoses"`
+	Situation domain.Situation       `json:"situation"`
+	Visits    []app.PutVisitInput    `json:"visits"`
+	Items     []app.PutItemInput     `json:"items"`
+	Discounts []app.PutDiscountInput `json:"discounts"`
+}
+
+func (h *Handler) createClassic(w http.ResponseWriter, r *http.Request) {
+	wsID, err := h.getWorkspaceID(r)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	var req classicPlanRequest
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	pl, err := h.svc.CreateClassic(r.Context(), wsID, app.ClassicPlanInput{
+		Palette:   req.Palette,
+		Locale:    req.Locale,
+		Patient:   app.ClassicPatientInput{Name: req.Patient.Name, Contact: req.Patient.Contact},
+		Title:     req.Title,
+		Diagnoses: req.Diagnoses,
+		Situation: req.Situation,
+		Visits:    req.Visits,
+		Items:     req.Items,
+		Discounts: req.Discounts,
+	})
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, pl)
+}
+
 type createPlanRequest struct {
-	PatientID string   `json:"patient_id"`
-	Title     string   `json:"title"`
-	Currency  string   `json:"currency"`
-	Diagnoses []string `json:"diagnoses"`
+	PatientID string           `json:"patient_id"`
+	Title     string           `json:"title"`
+	Currency  string           `json:"currency"`
+	Palette   string           `json:"palette"`
+	Locale    string           `json:"locale"`
+	Diagnoses []string         `json:"diagnoses"`
+	Situation domain.Situation `json:"situation"`
 }
 
 func (h *Handler) createPlan(w http.ResponseWriter, r *http.Request) {
@@ -182,7 +245,10 @@ func (h *Handler) createPlan(w http.ResponseWriter, r *http.Request) {
 		PatientID: patID,
 		Title:     req.Title,
 		Currency:  req.Currency,
+		Palette:   req.Palette,
+		Locale:    req.Locale,
 		Diagnoses: req.Diagnoses,
+		Situation: req.Situation,
 	})
 	if err != nil {
 		httpx.WriteError(w, err)
@@ -211,8 +277,11 @@ func (h *Handler) getPlan(w http.ResponseWriter, r *http.Request) {
 }
 
 type patchPlanRequest struct {
-	Title     *string   `json:"title"`
-	Diagnoses *[]string `json:"diagnoses"`
+	Title     *string           `json:"title"`
+	Diagnoses *[]string         `json:"diagnoses"`
+	Palette   *string           `json:"palette"`
+	Locale    *string           `json:"locale"`
+	Situation *domain.Situation `json:"situation"`
 }
 
 func (h *Handler) patchPlan(w http.ResponseWriter, r *http.Request) {
@@ -231,7 +300,13 @@ func (h *Handler) patchPlan(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, err)
 		return
 	}
-	pl, err := h.svc.UpdatePlanHeader(r.Context(), wsID, planID, req.Title, req.Diagnoses)
+	pl, err := h.svc.UpdatePlanHeader(r.Context(), wsID, planID, app.UpdatePlanHeaderInput{
+		Title:     req.Title,
+		Diagnoses: req.Diagnoses,
+		Palette:   req.Palette,
+		Locale:    req.Locale,
+		Situation: req.Situation,
+	})
 	if err != nil {
 		httpx.WriteError(w, err)
 		return

@@ -114,7 +114,8 @@ func (s *Store) ListPlans(ctx context.Context, wsID id.ID) ([]domain.Plan, error
 		}
 		rows, err := tx.Query(ctx, `
 			SELECT p.id, p.workspace_id, p.patient_id, p.title, p.kind, p.status, p.currency,
-			       p.diagnoses, p.totals_subtotal, p.totals_discount, p.totals_grand,
+			       p.palette, p.locale, p.diagnoses, p.situation_json,
+			       p.totals_subtotal, p.totals_discount, p.totals_grand,
 			       p.snapshot_json, p.created_at, p.updated_at,
 			       pat.name, pat.contact_encrypted
 			FROM plans p
@@ -130,14 +131,16 @@ func (s *Store) ListPlans(ctx context.Context, wsID id.ID) ([]domain.Plan, error
 		for rows.Next() {
 			var pl domain.Plan
 			var pID, wsUUID, patID pgtype.UUID
-			var kind, status, curr string
+			var kind, status, curr, palette, locale string
 			var diagJSON []byte
+			var sitJSON []byte
 			var snapJSON []byte
 			var patName, patContact *string
 
 			if err := rows.Scan(
 				&pID, &wsUUID, &patID, &pl.Title, &kind, &status, &curr,
-				&diagJSON, &pl.TotalsSubtotal, &pl.TotalsDiscount, &pl.TotalsGrand,
+				&palette, &locale, &diagJSON, &sitJSON,
+				&pl.TotalsSubtotal, &pl.TotalsDiscount, &pl.TotalsGrand,
 				&snapJSON, &pl.CreatedAt, &pl.UpdatedAt,
 				&patName, &patContact,
 			); err != nil {
@@ -149,9 +152,14 @@ func (s *Store) ListPlans(ctx context.Context, wsID id.ID) ([]domain.Plan, error
 			pl.Kind = domain.PlanKind(kind)
 			pl.Status = domain.PlanStatus(status)
 			pl.Currency = money.Currency(curr)
+			pl.Palette, _ = domain.ParsePalette(palette)
+			pl.Locale, _ = domain.ParseLocale(locale)
 
 			if len(diagJSON) > 0 {
 				_ = json.Unmarshal(diagJSON, &pl.Diagnoses)
+			}
+			if len(sitJSON) > 0 {
+				_ = json.Unmarshal(sitJSON, &pl.Situation)
 			}
 			if len(snapJSON) > 0 {
 				_ = json.Unmarshal(snapJSON, &pl.SnapshotJSON)
@@ -173,7 +181,7 @@ func (s *Store) ListPlans(ctx context.Context, wsID id.ID) ([]domain.Plan, error
 
 		if len(out) > 0 {
 			vRows, err := tx.Query(ctx, `
-				SELECT id, plan_id, workspace_id, order_num, title, created_at, updated_at
+				SELECT id, plan_id, workspace_id, order_num, title, phase_label, healing_note, chart_teeth, created_at, updated_at
 				FROM plan_visits
 				WHERE workspace_id = $1
 				ORDER BY order_num ASC
@@ -187,7 +195,7 @@ func (s *Store) ListPlans(ctx context.Context, wsID id.ID) ([]domain.Plan, error
 				for vRows.Next() {
 					var v domain.Visit
 					var vID, vPlanID, vWsUUID pgtype.UUID
-					if err := vRows.Scan(&vID, &vPlanID, &vWsUUID, &v.OrderNum, &v.Title, &v.CreatedAt, &v.UpdatedAt); err == nil {
+					if err := vRows.Scan(&vID, &vPlanID, &vWsUUID, &v.OrderNum, &v.Title, &v.PhaseLabel, &v.HealingNote, &v.ChartTeeth, &v.CreatedAt, &v.UpdatedAt); err == nil {
 						v.ID = fromUUID(vID)
 						v.PlanID = fromUUID(vPlanID)
 						v.WorkspaceID = fromUUID(vWsUUID)
@@ -210,13 +218,15 @@ func (s *Store) GetPlan(ctx context.Context, wsID id.ID, planID id.ID) (domain.P
 			return err
 		}
 		var pID, wsUUID, patID pgtype.UUID
-		var kind, status, curr string
+		var kind, status, curr, palette, locale string
 		var diagJSON []byte
+		var sitJSON []byte
 		var snapJSON []byte
 
 		row := tx.QueryRow(ctx, `
 			SELECT id, workspace_id, patient_id, title, kind, status, currency,
-			       diagnoses, totals_subtotal, totals_discount, totals_grand,
+			       palette, locale, diagnoses, situation_json,
+			       totals_subtotal, totals_discount, totals_grand,
 			       snapshot_json, created_at, updated_at
 			FROM plans
 			WHERE workspace_id = $1 AND id = $2
@@ -224,7 +234,8 @@ func (s *Store) GetPlan(ctx context.Context, wsID id.ID, planID id.ID) (domain.P
 
 		if err := row.Scan(
 			&pID, &wsUUID, &patID, &pl.Title, &kind, &status, &curr,
-			&diagJSON, &pl.TotalsSubtotal, &pl.TotalsDiscount, &pl.TotalsGrand,
+			&palette, &locale, &diagJSON, &sitJSON,
+			&pl.TotalsSubtotal, &pl.TotalsDiscount, &pl.TotalsGrand,
 			&snapJSON, &pl.CreatedAt, &pl.UpdatedAt,
 		); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -239,9 +250,14 @@ func (s *Store) GetPlan(ctx context.Context, wsID id.ID, planID id.ID) (domain.P
 		pl.Kind = domain.PlanKind(kind)
 		pl.Status = domain.PlanStatus(status)
 		pl.Currency = money.Currency(curr)
+		pl.Palette, _ = domain.ParsePalette(palette)
+		pl.Locale, _ = domain.ParseLocale(locale)
 
 		if len(diagJSON) > 0 {
 			_ = json.Unmarshal(diagJSON, &pl.Diagnoses)
+		}
+		if len(sitJSON) > 0 {
+			_ = json.Unmarshal(sitJSON, &pl.Situation)
 		}
 		if len(snapJSON) > 0 {
 			_ = json.Unmarshal(snapJSON, &pl.SnapshotJSON)
@@ -249,7 +265,7 @@ func (s *Store) GetPlan(ctx context.Context, wsID id.ID, planID id.ID) (domain.P
 
 		// Visits
 		vRows, err := tx.Query(ctx, `
-			SELECT id, plan_id, workspace_id, order_num, title, created_at, updated_at
+			SELECT id, plan_id, workspace_id, order_num, title, phase_label, healing_note, chart_teeth, created_at, updated_at
 			FROM plan_visits
 			WHERE workspace_id = $1 AND plan_id = $2
 			ORDER BY order_num ASC
@@ -262,7 +278,7 @@ func (s *Store) GetPlan(ctx context.Context, wsID id.ID, planID id.ID) (domain.P
 		for vRows.Next() {
 			var v domain.Visit
 			var vID, vPlanID, vWsUUID pgtype.UUID
-			if err := vRows.Scan(&vID, &vPlanID, &vWsUUID, &v.OrderNum, &v.Title, &v.CreatedAt, &v.UpdatedAt); err != nil {
+			if err := vRows.Scan(&vID, &vPlanID, &vWsUUID, &v.OrderNum, &v.Title, &v.PhaseLabel, &v.HealingNote, &v.ChartTeeth, &v.CreatedAt, &v.UpdatedAt); err != nil {
 				return err
 			}
 			v.ID = fromUUID(vID)
@@ -277,7 +293,7 @@ func (s *Store) GetPlan(ctx context.Context, wsID id.ID, planID id.ID) (domain.P
 		// Items
 		iRows, err := tx.Query(ctx, `
 			SELECT id, plan_id, visit_id, workspace_id, treatment_id, treatment_name,
-			       tooth_number, quantity, unit_price, is_package, order_num, created_at, updated_at
+			       tooth_number, teeth, description, quantity, unit_price, is_package, order_num, created_at, updated_at
 			FROM plan_items
 			WHERE workspace_id = $1 AND plan_id = $2
 			ORDER BY order_num ASC
@@ -293,7 +309,7 @@ func (s *Store) GetPlan(ctx context.Context, wsID id.ID, planID id.ID) (domain.P
 			var itVisitID, itTrID pgtype.UUID
 			if err := iRows.Scan(
 				&itID, &itPlanID, &itVisitID, &itWsUUID, &itTrID, &it.TreatmentName,
-				&it.ToothNumber, &it.Quantity, &it.UnitPrice, &it.IsPackage, &it.OrderNum,
+				&it.ToothNumber, &it.Teeth, &it.Description, &it.Quantity, &it.UnitPrice, &it.IsPackage, &it.OrderNum,
 				&it.CreatedAt, &it.UpdatedAt,
 			); err != nil {
 				return err
@@ -349,11 +365,13 @@ func (s *Store) CreatePlan(ctx context.Context, p domain.Plan) error {
 			return err
 		}
 		diagJSON, _ := json.Marshal(p.Diagnoses)
+		sitJSON, _ := json.Marshal(p.Situation)
 		tag, err := tx.Exec(ctx, `
 			INSERT INTO plans (
 				id, workspace_id, patient_id, title, kind, status, currency,
-				diagnoses, totals_subtotal, totals_discount, totals_grand
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+				palette, locale, diagnoses, situation_json,
+				totals_subtotal, totals_discount, totals_grand
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		`,
 			toUUID(p.ID),
 			toUUID(p.WorkspaceID),
@@ -362,7 +380,10 @@ func (s *Store) CreatePlan(ctx context.Context, p domain.Plan) error {
 			string(p.Kind),
 			string(p.Status),
 			string(p.Currency),
+			string(p.Palette),
+			string(p.Locale),
 			diagJSON,
+			sitJSON,
 			p.TotalsSubtotal,
 			p.TotalsDiscount,
 			p.TotalsGrand,
@@ -383,11 +404,12 @@ func (s *Store) UpdatePlanHeader(ctx context.Context, p domain.Plan) error {
 			return err
 		}
 		diagJSON, _ := json.Marshal(p.Diagnoses)
+		sitJSON, _ := json.Marshal(p.Situation)
 		tag, err := tx.Exec(ctx, `
 			UPDATE plans
-			SET title = $3, diagnoses = $4, updated_at = now()
+			SET title = $3, diagnoses = $4, situation_json = $5, palette = $6, locale = $7, updated_at = now()
 			WHERE workspace_id = $1 AND id = $2 AND status = 'draft'
-		`, toUUID(p.WorkspaceID), toUUID(p.ID), p.Title, diagJSON)
+		`, toUUID(p.WorkspaceID), toUUID(p.ID), p.Title, diagJSON, sitJSON, string(p.Palette), string(p.Locale))
 		if err != nil {
 			return err
 		}
@@ -412,10 +434,14 @@ func (s *Store) ReplaceVisits(ctx context.Context, wsID id.ID, planID id.ID, vis
 		}
 
 		for _, v := range visits {
+			teeth := v.ChartTeeth
+			if teeth == nil {
+				teeth = []string{}
+			}
 			_, err := tx.Exec(ctx, `
-				INSERT INTO plan_visits (id, plan_id, workspace_id, order_num, title)
-				VALUES ($1, $2, $3, $4, $5)
-			`, toUUID(v.ID), toUUID(planID), toUUID(wsID), v.OrderNum, v.Title)
+				INSERT INTO plan_visits (id, plan_id, workspace_id, order_num, title, phase_label, healing_note, chart_teeth)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			`, toUUID(v.ID), toUUID(planID), toUUID(wsID), v.OrderNum, v.Title, v.PhaseLabel, v.HealingNote, teeth)
 			if err != nil {
 				return err
 			}
@@ -447,14 +473,18 @@ func (s *Store) ReplaceItems(ctx context.Context, wsID id.ID, planID id.ID, item
 				u := toUUID(*it.TreatmentID)
 				trUUID = &u
 			}
+			teeth := it.Teeth
+			if teeth == nil {
+				teeth = []string{}
+			}
 			_, err := tx.Exec(ctx, `
 				INSERT INTO plan_items (
 					id, plan_id, visit_id, workspace_id, treatment_id, treatment_name,
-					tooth_number, quantity, unit_price, is_package, order_num
-				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+					tooth_number, teeth, description, quantity, unit_price, is_package, order_num
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 			`,
 				toUUID(it.ID), toUUID(planID), vUUID, toUUID(wsID), trUUID, it.TreatmentName,
-				it.ToothNumber, it.Quantity, it.UnitPrice, it.IsPackage, it.OrderNum,
+				it.ToothNumber, teeth, it.Description, it.Quantity, it.UnitPrice, it.IsPackage, it.OrderNum,
 			)
 			if err != nil {
 				return err
@@ -541,4 +571,3 @@ func fromUUID(u pgtype.UUID) id.ID {
 	}
 	return out
 }
-

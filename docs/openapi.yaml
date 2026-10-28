@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: Treatment Plus API
-  version: 0.2.0
-  description: Users authenticate. Role clinic|personal authorizes. Cookies stay on the Next BFF.
+  version: 0.3.0
+  description: Users authenticate. Role clinic|personal authorizes. Clinic brand is stored once. Each Classic PDF selects palette and locale. Cookies stay on the Next BFF.
 servers:
   - url: /v1
 paths:
@@ -187,6 +187,49 @@ paths:
       responses:
         "201":
           description: Created
+  /clinic/settings:
+    get:
+      summary: Wise clinic brand stored on the account
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClinicSettings"
+    patch:
+      summary: Update clinic brand (cover, doctor, lab, hotel, contact)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClinicSettings"
+  /plans/classic/form:
+    get:
+      summary: Classic form. Clinic brand is read-only. First step selects palette and locale.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+  /plans/classic:
+    post:
+      summary: Submit one Classic plan. Palette and locale are required per PDF.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClassicPlanRequest"
+      responses:
+        "201":
+          description: Created
+        "422":
+          $ref: "#/components/responses/Error"
   /plans:
     get:
       summary: List plans for current workspace
@@ -241,6 +284,51 @@ paths:
       responses:
         "200":
           description: OK
+  /plans/{id}/pdf:
+    post:
+      summary: Generate the 24-page Classic PDF from the locked snapshot
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+        "422":
+          $ref: "#/components/responses/Error"
+    get:
+      summary: Download the generated Classic PDF
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: PDF
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/Error"
+  /media:
+    post:
+      summary: Upload a clinic image (jpeg/png). Use the returned key on clinic settings or the plan.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                kind:
+                  type: string
+                  enum: [logo, cover, about, team, doctor, xray, lab, hotel, before, after, other]
+      responses:
+        "201":
+          description: Created
+        "422":
+          $ref: "#/components/responses/Error"
 components:
   securitySchemes:
     bearerAuth:
@@ -271,6 +359,184 @@ components:
           type: string
         role:
           $ref: "#/components/schemas/Role"
+        clinic:
+          $ref: "#/components/schemas/ClinicProfile"
+    ClinicProfile:
+      type: object
+      description: One-time Wise brand. Required when role is clinic. Palette here is the account default; each PDF still selects its own.
+      required: [phone, email, address, hours, slogan, signer_name]
+      properties:
+        slogan:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        website:
+          type: string
+        address:
+          type: string
+        hours:
+          type: string
+        locale:
+          type: string
+          enum: [tr, en]
+        currency:
+          type: string
+          enum: [TRY, EUR, USD]
+        palette:
+          type: string
+          enum: [navy, forest, rose, slate]
+        logo_key:
+          type: string
+        cover_key:
+          type: string
+        map_url:
+          type: string
+        intro:
+          type: string
+        legal:
+          type: string
+        about_text:
+          type: string
+        about_key:
+          type: string
+        welcome_body:
+          type: string
+        signer_name:
+          type: string
+        signer_title:
+          type: string
+        highlights:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClinicStat"
+        doctor:
+          $ref: "#/components/schemas/ClinicDoctor"
+        lab:
+          $ref: "#/components/schemas/ClinicLab"
+        awards:
+          $ref: "#/components/schemas/ClinicAwards"
+        hotel:
+          $ref: "#/components/schemas/ClinicHotel"
+    ClinicStat:
+      type: object
+      properties:
+        value:
+          type: string
+        label:
+          type: string
+    ClinicDoctor:
+      type: object
+      properties:
+        name: { type: string }
+        title: { type: string }
+        subtitle: { type: string }
+        bio: { type: string }
+        photo_key: { type: string }
+        stats:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClinicStat"
+    ClinicLab:
+      type: object
+      properties:
+        title: { type: string }
+        text: { type: string }
+        image_key: { type: string }
+        stats:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClinicStat"
+    ClinicAwards:
+      type: object
+      properties:
+        text: { type: string }
+        badge_keys:
+          type: array
+          items: { type: string }
+    ClinicHotel:
+      type: object
+      properties:
+        name: { type: string }
+        text: { type: string }
+        image_key: { type: string }
+    ClinicSettings:
+      allOf:
+        - $ref: "#/components/schemas/ClinicProfile"
+        - type: object
+          properties:
+            workspace_id:
+              type: string
+            name:
+              type: string
+    ClassicPlanRequest:
+      type: object
+      required: [palette, locale, patient]
+      properties:
+        palette:
+          type: string
+          enum: [navy, forest, rose, slate]
+        locale:
+          type: string
+          enum: [tr, en]
+        patient:
+          type: object
+          required: [name]
+          properties:
+            name: { type: string }
+            contact: { type: string }
+        title:
+          type: string
+        situation:
+          type: object
+          properties:
+            xray_key: { type: string }
+            chart_teeth:
+              type: array
+              items: { type: string }
+            tooth_findings:
+              type: array
+              items:
+                type: object
+                properties:
+                  tooth: { type: string }
+                  status: { type: string, enum: [intact, missing, filled, crown] }
+                  note: { type: string }
+            general_diagnoses:
+              type: array
+              items: { type: string }
+        visits:
+          type: array
+          items:
+            type: object
+            properties:
+              title: { type: string }
+              phase_label: { type: string }
+              healing_note: { type: string }
+              chart_teeth:
+                type: array
+                items: { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              treatment_name: { type: string }
+              description: { type: string }
+              teeth:
+                type: array
+                items: { type: string }
+              quantity: { type: integer }
+              unit_price: { type: integer }
+              is_package: { type: boolean }
+        discounts:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string }
+              amount: { type: integer }
     LoginRequest:
       type: object
       required: [email, password]

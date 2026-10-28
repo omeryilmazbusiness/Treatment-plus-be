@@ -1,2 +1,2 @@
-// Package app holds media use-cases. Phase 5. Public buckets are never used.
+// Package app holds clinic image uploads. Public buckets are never used.
 package app

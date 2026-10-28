@@ -1,12 +1,36 @@
 package domain_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/treatment-plus/treatment-plus-be/internal/plan/domain"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/id"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/money"
 )
+
+func TestClassicFormSectionsOrder(t *testing.T) {
+	sections := domain.ClassicFormSections()
+	if len(sections) != 5 {
+		t.Fatalf("len %d", len(sections))
+	}
+	want := []string{"presentation", "patient", "situation", "visits", "discounts"}
+	for i, id := range want {
+		if sections[i].ID != id || sections[i].Order != i+1 {
+			t.Fatalf("section %d = %+v", i, sections[i])
+		}
+	}
+	if sections[0].Fields[0].Name != "palette" || sections[0].Fields[1].Name != "locale" {
+		t.Fatalf("presentation fields %+v", sections[0].Fields)
+	}
+	for _, s := range sections {
+		for _, f := range s.Fields {
+			if strings.HasPrefix(f.Name, "clinic.") || f.Name == "logo_key" {
+				t.Fatalf("clinic brand leaked into plan form: %s", f.Name)
+			}
+		}
+	}
+}
 
 func TestCalculateTotals_PackageDoesNotAdd(t *testing.T) {
 	items := []domain.Item{
@@ -71,6 +95,19 @@ func TestItem_LineTotal(t *testing.T) {
 	itPkg := domain.Item{Quantity: 3, UnitPrice: 15000, IsPackage: true}
 	if itPkg.LineTotal() != 0 {
 		t.Errorf("expected 0 for package item, got %d", itPkg.LineTotal())
+	}
+}
+
+func TestItemTeethAndSituation(t *testing.T) {
+	first, all := domain.ItemTeeth(nil, []string{"16", "16", "17"})
+	if first == nil || *first != "16" || len(all) != 2 {
+		t.Fatalf("%v %v", first, all)
+	}
+	sit := domain.MergeSituation([]string{"Gingivitis"}, domain.Situation{
+		ToothFindings: []domain.ToothFinding{{Tooth: "16", Status: "missing"}},
+	})
+	if sit.Diagnoses()[0] != "Gingivitis" || sit.ToothFindings[0].Status != domain.ToothMissing {
+		t.Fatalf("%+v", sit)
 	}
 }
 

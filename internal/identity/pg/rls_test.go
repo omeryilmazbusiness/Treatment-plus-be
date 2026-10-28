@@ -3,14 +3,9 @@ package pg_test
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -18,8 +13,8 @@ import (
 	identitypg "github.com/treatment-plus/treatment-plus-be/internal/identity/pg"
 	"github.com/treatment-plus/treatment-plus-be/internal/platform/authn"
 	"github.com/treatment-plus/treatment-plus-be/internal/platform/config"
-	"github.com/treatment-plus/treatment-plus-be/internal/platform/postgres"
 	"github.com/treatment-plus/treatment-plus-be/internal/platform/postgres/dbgen"
+	"github.com/treatment-plus/treatment-plus-be/internal/platform/postgres/pgtest"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/clock"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/ctxkey"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/errx"
@@ -28,18 +23,7 @@ import (
 
 func TestRLSZeroRowsForOtherClinic(t *testing.T) {
 	ctx := context.Background()
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := migrateUp(cfg.Database.URL); err != nil {
-		t.Skipf("postgres/migrate not available: %v", err)
-	}
-	pool, err := postgres.NewPool(ctx, cfg.Database)
-	if err != nil {
-		t.Skipf("app role not available: %v", err)
-	}
-	t.Cleanup(pool.Close)
+	pool := pgtest.Open(t)
 
 	store := identitypg.New(pool)
 	tokens, err := authn.NewJWT(config.Auth{
@@ -49,7 +33,7 @@ func TestRLSZeroRowsForOtherClinic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := identityapp.NewService(store, store, store, store, authn.FastArgon2id(), tokens, clock.System{}, time.Hour)
+	svc, err := identityapp.NewService(store, store, store, store, authn.FastArgon2id(), tokens, clock.System{}, time.Hour, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,6 +41,7 @@ func TestRLSZeroRowsForOtherClinic(t *testing.T) {
 	suffix := id.New().String()
 	a, err := svc.Register(ctx, identityapp.RegisterInput{
 		Name: "Klinik A", Email: "a-" + suffix + "@clinic.com", Password: "secret-1a", Role: "clinic",
+		Clinic: identityapp.RequiredClinic("+90 555 111 2233"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -119,36 +104,4 @@ func uuidFromID(v id.ID) pgtype.UUID {
 	copy(u.Bytes[:], v.Bytes())
 	u.Valid = true
 	return u
-}
-
-func migrateUp(dsn string) error {
-	dir, err := findMigrations()
-	if err != nil {
-		return err
-	}
-	m, err := migrate.New("file://"+dir, dsn)
-	if err != nil {
-		return err
-	}
-	defer func() { _, _ = m.Close() }()
-	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return err
-	}
-	return nil
-}
-
-func findMigrations() (string, error) {
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	dir := wd
-	for i := 0; i < 6; i++ {
-		candidate := filepath.Join(dir, "db", "migrations")
-		if st, err := os.Stat(candidate); err == nil && st.IsDir() {
-			return candidate, nil
-		}
-		dir = filepath.Dir(dir)
-	}
-	return "", errors.New("db/migrations not found")
 }

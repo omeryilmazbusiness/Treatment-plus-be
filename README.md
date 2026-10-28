@@ -78,4 +78,4 @@ EU, private network. Servisler: `api`, `worker`, Postgres, Redis.
 
 0 iskelet → 1 kimlik + RLS → 2 marka → 3 katalog → 4 plan → 5–6 hasta web + link → 7 medya/PDF → 8 AI
 
-Yasak başlangıç: AI, PDF, Stripe.
+Classic PDF: `POST /v1/plans/:id/pdf` (ready plan), `GET` ile indir. Award görseli statik; logo/kapak/hekim/röntgen/lab/otel `POST /v1/media`.

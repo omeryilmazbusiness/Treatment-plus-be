@@ -108,7 +108,7 @@ func Load() (Config, error) {
 			WriteTimeout:    envDuration("HTTP_WRITE_TIMEOUT", 15*time.Second),
 			IdleTimeout:     envDuration("HTTP_IDLE_TIMEOUT", 60*time.Second),
 			ShutdownTimeout: envDuration("HTTP_SHUTDOWN_TIMEOUT", 15*time.Second),
-			MaxBodyBytes:    envInt64("HTTP_MAX_BODY_BYTES", 1<<20),
+			MaxBodyBytes:    envInt64("HTTP_MAX_BODY_BYTES", 8<<20),
 			CORSOrigins:     splitCSV(env("CORS_ORIGINS", "http://localhost:3000")),
 		},
 		Database: Database{
@@ -127,7 +127,7 @@ func Load() (Config, error) {
 			JWTAccessSecret:  env("JWT_ACCESS_SECRET", ""),
 			JWTRefreshSecret: env("JWT_REFRESH_SECRET", ""),
 			KMSKey:           env("KMS_KEY", ""),
-			AccessTTL:        envDuration("JWT_ACCESS_TTL", 24*time.Hour),
+			AccessTTL:        envDuration("JWT_ACCESS_TTL", 15*time.Minute),
 			RefreshTTL:       envDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
 		},
 		Object: Object{
@@ -162,6 +162,7 @@ func Load() (Config, error) {
 }
 
 const LocalJWTAccessSecret = "local-dev-jwt-access-secret-min-32b"
+const LocalKMSKey = "local-dev-kms-key-must-be-at-least-32b"
 
 func (a *Auth) apply(local bool) error {
 	if a.JWTAccessSecret == "" && local {
@@ -169,6 +170,12 @@ func (a *Auth) apply(local bool) error {
 	}
 	if len(a.JWTAccessSecret) < 32 {
 		return fmt.Errorf("config: JWT_ACCESS_SECRET must be at least 32 bytes")
+	}
+	if a.KMSKey == "" && local {
+		a.KMSKey = LocalKMSKey
+	}
+	if len(a.KMSKey) < 32 {
+		return fmt.Errorf("config: KMS_KEY must be at least 32 bytes")
 	}
 	return nil
 }

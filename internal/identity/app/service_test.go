@@ -37,7 +37,7 @@ func newService(t *testing.T) (*app.Service, *mem.Store) {
 	t.Helper()
 	store := mem.New()
 	clk := clock.Fixed{T: time.Date(2026, 10, 27, 8, 0, 0, 0, time.UTC)}
-	svc, err := app.NewService(store, store, store, store, fakeHasher{}, fakeAccess{}, clk, 7*24*time.Hour)
+	svc, err := app.NewService(store, store, store, store, fakeHasher{}, fakeAccess{}, clk, 7*24*time.Hour, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,6 +50,7 @@ func TestRegisterClinicAndPersonal(t *testing.T) {
 
 	clinic, err := svc.Register(ctx, app.RegisterInput{
 		Name: "Klinik A", Email: "a@clinic.com", Password: "secret-1a", Role: "clinic",
+		Clinic: app.RequiredClinic("+90 555 111 2233"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -84,6 +85,7 @@ func TestRegisterLoginRefreshLogout(t *testing.T) {
 
 	reg, err := svc.Register(ctx, app.RegisterInput{
 		Name: "Klinik A", Email: "a@clinic.com", Password: "secret-1a", Role: "clinic",
+		Clinic: app.RequiredClinic("+90 555 111 2233"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -113,7 +115,7 @@ func TestRegisterLoginRefreshLogout(t *testing.T) {
 func TestGetWorkspaceIDOR(t *testing.T) {
 	svc, _ := newService(t)
 	ctx := context.Background()
-	a, err := svc.Register(ctx, app.RegisterInput{Name: "Klinik A", Email: "a@clinic.com", Password: "secret-1a", Role: "clinic"})
+	a, err := svc.Register(ctx, app.RegisterInput{Name: "Klinik A", Email: "a@clinic.com", Password: "secret-1a", Role: "clinic", Clinic: app.RequiredClinic("+90 555 111 2233")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,5 +143,8 @@ func TestRegisterValidation(t *testing.T) {
 	}
 	if _, err := svc.Register(context.Background(), app.RegisterInput{Name: "Klinik A", Email: "a@clinic.com", Password: "secret-1a", Role: "admin"}); !errors.Is(err, errx.ErrInvalid) {
 		t.Fatalf("got %v", err)
+	}
+	if _, err := svc.Register(context.Background(), app.RegisterInput{Name: "Klinik A", Email: "c@clinic.com", Password: "secret-1a", Role: "clinic"}); !errors.Is(err, errx.ErrInvalid) {
+		t.Fatalf("clinic without phone: %v", err)
 	}
 }

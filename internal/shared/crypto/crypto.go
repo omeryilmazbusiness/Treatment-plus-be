@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"io"
+	"strings"
 )
 
 type Encrypter interface {
@@ -21,8 +22,8 @@ type AESGCM struct {
 }
 
 func NewAESGCM(secret string) *AESGCM {
-	if secret == "" {
-		secret = "default-dev-secret-key-for-treatment-plus-encryption-32"
+	if strings.TrimSpace(secret) == "" {
+		panic("crypto: KMS key is required")
 	}
 	h := sha256.Sum256([]byte(secret))
 	return &AESGCM{key: h[:]}

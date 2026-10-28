@@ -107,8 +107,29 @@ func TestService_UpdateAndGetRoundtrip(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if got != updated {
+	if got.Name != updated.Name || got.Phone != updated.Phone || got.Palette != updated.Palette || got.Email != updated.Email {
 		t.Fatalf("GET mismatch after PATCH: got %+v, want %+v", got, updated)
+	}
+}
+
+func TestService_OnboardPersistsBrandOnce(t *testing.T) {
+	store := newFakeStore()
+	svc := app.NewService(store)
+	wsID := id.New()
+	got, err := svc.Onboard(context.Background(), wsID, app.OnboardInput{
+		Name: "Klinik A", Slogan: "Every Smile Matters", Phone: "+90 555 111 2233",
+		Email: "info@klinik.test", Address: "Bağdat Cad. No:1", Hours: "09:00-18:00",
+		SignerName: "Dr. Ada", Palette: "forest", RequireBrand: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Phone != "+90 555 111 2233" || got.Palette != domain.PaletteForest {
+		t.Fatalf("%+v", got)
+	}
+	stored, err := svc.GetSettings(context.Background(), wsID)
+	if err != nil || stored.Phone != got.Phone {
+		t.Fatalf("get after onboard: %+v %v", stored, err)
 	}
 }
 

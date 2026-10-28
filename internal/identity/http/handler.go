@@ -39,11 +39,113 @@ func (h *Handler) Register(r chi.Router) {
 	})
 }
 
-type registerRequest struct {
+type clinicStatRequest struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
+
+type clinicDoctorRequest struct {
+	Name     string              `json:"name"`
+	Title    string              `json:"title"`
+	Subtitle string              `json:"subtitle"`
+	Bio      string              `json:"bio"`
+	PhotoKey string              `json:"photo_key"`
+	Stats    []clinicStatRequest `json:"stats"`
+}
+
+type clinicLabRequest struct {
+	Title    string              `json:"title"`
+	Text     string              `json:"text"`
+	ImageKey string              `json:"image_key"`
+	Stats    []clinicStatRequest `json:"stats"`
+}
+
+type clinicAwardsRequest struct {
+	Text      string   `json:"text"`
+	BadgeKeys []string `json:"badge_keys"`
+}
+
+type clinicHotelRequest struct {
 	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	Role     string `json:"role"`
+	Text     string `json:"text"`
+	ImageKey string `json:"image_key"`
+}
+
+type clinicProfileRequest struct {
+	Slogan      string              `json:"slogan"`
+	Phone       string              `json:"phone"`
+	Email       string              `json:"email"`
+	Website     string              `json:"website"`
+	Address     string              `json:"address"`
+	Hours       string              `json:"hours"`
+	Locale      string              `json:"locale"`
+	Currency    string              `json:"currency"`
+	Palette     string              `json:"palette"`
+	LogoKey     string              `json:"logo_key"`
+	CoverKey    string              `json:"cover_key"`
+	MapURL      string              `json:"map_url"`
+	Intro       string              `json:"intro"`
+	Legal       string              `json:"legal"`
+	AboutText   string              `json:"about_text"`
+	AboutKey    string              `json:"about_key"`
+	WelcomeBody string              `json:"welcome_body"`
+	SignerName  string              `json:"signer_name"`
+	SignerTitle string              `json:"signer_title"`
+	Highlights  []clinicStatRequest `json:"highlights"`
+	Doctor      clinicDoctorRequest `json:"doctor"`
+	Lab         clinicLabRequest    `json:"lab"`
+	Awards      clinicAwardsRequest `json:"awards"`
+	Hotel       clinicHotelRequest  `json:"hotel"`
+}
+
+func toClinicStats(in []clinicStatRequest) []app.ClinicStat {
+	var out []app.ClinicStat
+	for _, s := range in {
+		out = append(out, app.ClinicStat{Value: s.Value, Label: s.Label})
+	}
+	return out
+}
+
+func (c clinicProfileRequest) toProfile() app.ClinicProfile {
+	return app.ClinicProfile{
+		Slogan:      c.Slogan,
+		Phone:       c.Phone,
+		Email:       c.Email,
+		Website:     c.Website,
+		Address:     c.Address,
+		Hours:       c.Hours,
+		Locale:      c.Locale,
+		Currency:    c.Currency,
+		Palette:     c.Palette,
+		LogoKey:     c.LogoKey,
+		CoverKey:    c.CoverKey,
+		MapURL:      c.MapURL,
+		Intro:       c.Intro,
+		Legal:       c.Legal,
+		AboutText:   c.AboutText,
+		AboutKey:    c.AboutKey,
+		WelcomeBody: c.WelcomeBody,
+		SignerName:  c.SignerName,
+		SignerTitle: c.SignerTitle,
+		Highlights:  toClinicStats(c.Highlights),
+		Doctor: app.ClinicDoctor{
+			Name: c.Doctor.Name, Title: c.Doctor.Title, Subtitle: c.Doctor.Subtitle,
+			Bio: c.Doctor.Bio, PhotoKey: c.Doctor.PhotoKey, Stats: toClinicStats(c.Doctor.Stats),
+		},
+		Lab: app.ClinicLab{
+			Title: c.Lab.Title, Text: c.Lab.Text, ImageKey: c.Lab.ImageKey, Stats: toClinicStats(c.Lab.Stats),
+		},
+		Awards: app.ClinicAwards{Text: c.Awards.Text, BadgeKeys: c.Awards.BadgeKeys},
+		Hotel:  app.ClinicHotel{Name: c.Hotel.Name, Text: c.Hotel.Text, ImageKey: c.Hotel.ImageKey},
+	}
+}
+
+type registerRequest struct {
+	Name     string               `json:"name"`
+	Email    string               `json:"email"`
+	Password string               `json:"password"`
+	Role     string               `json:"role"`
+	Clinic   clinicProfileRequest `json:"clinic"`
 }
 
 type loginRequest struct {
@@ -96,6 +198,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		Email:    req.Email,
 		Password: req.Password,
 		Role:     req.Role,
+		Clinic:   req.Clinic.toProfile(),
 	})
 	if err != nil {
 		httpx.WriteError(w, err)

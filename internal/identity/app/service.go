@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/treatment-plus/treatment-plus-be/internal/identity/domain"
@@ -19,6 +20,7 @@ type RegisterInput struct {
 	Email    string
 	Password string
 	Role     string
+	Clinic   ClinicProfile
 }
 
 type LoginInput struct {
@@ -64,6 +66,7 @@ type Service struct {
 	clock      clock.Clock
 	refreshTTL time.Duration
 	dummyHash  string
+	profiles   ProfileProvisioner
 }
 
 func NewService(
@@ -75,6 +78,7 @@ func NewService(
 	access AccessIssuer,
 	clk clock.Clock,
 	refreshTTL time.Duration,
+	profiles ProfileProvisioner,
 ) (*Service, error) {
 	if clk == nil {
 		clk = clock.System{}
@@ -96,6 +100,7 @@ func NewService(
 		clock:      clk,
 		refreshTTL: refreshTTL,
 		dummyHash:  dummy,
+		profiles:   profiles,
 	}, nil
 }
 
@@ -159,7 +164,41 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (AuthResult, e
 	if err != nil {
 		return AuthResult{}, err
 	}
+	if err := s.provisionProfile(ctx, workspaceID, name, role, in.Clinic); err != nil {
+		return AuthResult{}, err
+	}
 	return s.issue(account, rawRefresh, now)
+}
+
+func (s *Service) provisionProfile(ctx context.Context, workspaceID id.ID, name string, role domain.Role, in ClinicProfile) error {
+	if role == domain.RoleClinic {
+		if strings.TrimSpace(in.Slogan) == "" {
+			return errx.New("clinic_slogan_required", "clinic slogan is required for the PDF cover", errx.ErrInvalid)
+		}
+		if strings.TrimSpace(in.Phone) == "" {
+			return errx.New("clinic_phone_required", "clinic phone is required for the PDF contact page", errx.ErrInvalid)
+		}
+		if strings.TrimSpace(in.Email) == "" {
+			return errx.New("clinic_email_required", "clinic email is required for the PDF contact page", errx.ErrInvalid)
+		}
+		if strings.TrimSpace(in.Address) == "" {
+			return errx.New("clinic_address_required", "clinic address is required for the PDF contact page", errx.ErrInvalid)
+		}
+		if strings.TrimSpace(in.Hours) == "" {
+			return errx.New("clinic_hours_required", "clinic hours are required for the PDF contact page", errx.ErrInvalid)
+		}
+		if strings.TrimSpace(in.SignerName) == "" {
+			return errx.New("clinic_signer_required", "welcome letter signer is required", errx.ErrInvalid)
+		}
+	}
+	if s.profiles == nil {
+		return nil
+	}
+	profile := in
+	profile.Name = name
+	profile.RequireBrand = role == domain.RoleClinic
+	provisionCtx := ctxkey.WithClinicID(ctx, workspaceID.String())
+	return s.profiles.Provision(provisionCtx, workspaceID, profile)
 }
 
 func (s *Service) Login(ctx context.Context, in LoginInput) (AuthResult, error) {

@@ -7,13 +7,64 @@ import (
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/id"
 )
 
+type ClinicStatDTO struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
+
+type ClinicDoctorDTO struct {
+	Name     string          `json:"name"`
+	Title    string          `json:"title"`
+	Subtitle string          `json:"subtitle"`
+	Bio      string          `json:"bio"`
+	PhotoKey string          `json:"photo_key"`
+	Stats    []ClinicStatDTO `json:"stats,omitempty"`
+}
+
+type ClinicLabDTO struct {
+	Title    string          `json:"title"`
+	Text     string          `json:"text"`
+	ImageKey string          `json:"image_key"`
+	Stats    []ClinicStatDTO `json:"stats,omitempty"`
+}
+
+type ClinicAwardsDTO struct {
+	Text      string   `json:"text"`
+	BadgeKeys []string `json:"badge_keys,omitempty"`
+}
+
+type ClinicHotelDTO struct {
+	Name     string `json:"name"`
+	Text     string `json:"text"`
+	ImageKey string `json:"image_key"`
+}
+
 type ClinicSettingsDTO struct {
-	Name    string
-	Phone   string
-	Palette string
-	LogoKey string
-	Intro   string
-	Legal   string
+	Name        string          `json:"name"`
+	Slogan      string          `json:"slogan"`
+	Phone       string          `json:"phone"`
+	Email       string          `json:"email"`
+	Website     string          `json:"website"`
+	Address     string          `json:"address"`
+	Hours       string          `json:"hours"`
+	Palette     string          `json:"palette"`
+	Locale      string          `json:"locale"`
+	Currency    string          `json:"currency"`
+	LogoKey     string          `json:"logo_key"`
+	CoverKey    string          `json:"cover_key"`
+	MapURL      string          `json:"map_url"`
+	Intro       string          `json:"intro"`
+	Legal       string          `json:"legal"`
+	AboutText   string          `json:"about_text"`
+	AboutKey    string          `json:"about_key"`
+	WelcomeBody string          `json:"welcome_body"`
+	SignerName  string          `json:"signer_name"`
+	SignerTitle string          `json:"signer_title"`
+	Highlights  []ClinicStatDTO `json:"highlights,omitempty"`
+	Doctor      ClinicDoctorDTO `json:"doctor"`
+	Lab         ClinicLabDTO    `json:"lab"`
+	Awards      ClinicAwardsDTO `json:"awards"`
+	Hotel       ClinicHotelDTO  `json:"hotel"`
 }
 
 type SettingsReader interface {

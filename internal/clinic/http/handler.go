@@ -24,10 +24,8 @@ func NewHandler(svc *app.Service, auth *authn.JWT) *Handler {
 }
 
 func (h *Handler) Register(r chi.Router) {
-	// GET /v1/workspace - products catalog (Classic open, Ultimate closed)
 	r.Get("/workspace", h.getWorkspace)
 
-	// Authenticated routes
 	r.Group(func(r chi.Router) {
 		if h.auth != nil {
 			r.Use(h.auth.Require)
@@ -42,16 +40,61 @@ type productsResponse struct {
 }
 
 type settingsResponse struct {
-	WorkspaceID string `json:"workspace_id"`
-	Name        string `json:"name"`
-	Locale      string `json:"locale"`
-	Currency    string `json:"currency"`
-	Palette     string `json:"palette"`
-	LogoKey     string `json:"logo_key"`
-	Phone       string `json:"phone"`
-	MapURL      string `json:"map_url"`
-	Intro       string `json:"intro"`
-	Legal       string `json:"legal"`
+	WorkspaceID string        `json:"workspace_id"`
+	Name        string        `json:"name"`
+	Slogan      string        `json:"slogan"`
+	Locale      string        `json:"locale"`
+	Currency    string        `json:"currency"`
+	Palette     string        `json:"palette"`
+	LogoKey     string        `json:"logo_key"`
+	CoverKey    string        `json:"cover_key"`
+	Phone       string        `json:"phone"`
+	Email       string        `json:"email"`
+	Website     string        `json:"website"`
+	Address     string        `json:"address"`
+	Hours       string        `json:"hours"`
+	MapURL      string        `json:"map_url"`
+	Intro       string        `json:"intro"`
+	Legal       string        `json:"legal"`
+	AboutText   string        `json:"about_text"`
+	AboutKey    string        `json:"about_key"`
+	WelcomeBody string        `json:"welcome_body"`
+	SignerName  string        `json:"signer_name"`
+	SignerTitle string        `json:"signer_title"`
+	Highlights  []domain.Stat `json:"highlights"`
+	Doctor      domain.Doctor `json:"doctor"`
+	Lab         domain.Lab    `json:"lab"`
+	Awards      domain.Awards `json:"awards"`
+	Hotel       domain.Hotel  `json:"hotel"`
+}
+
+type patchSettingsRequest struct {
+	WorkspaceID *string        `json:"workspace_id,omitempty"`
+	Name        *string        `json:"name"`
+	Slogan      *string        `json:"slogan"`
+	Locale      *string        `json:"locale"`
+	Currency    *string        `json:"currency"`
+	Palette     *string        `json:"palette"`
+	LogoKey     *string        `json:"logo_key"`
+	CoverKey    *string        `json:"cover_key"`
+	Phone       *string        `json:"phone"`
+	Email       *string        `json:"email"`
+	Website     *string        `json:"website"`
+	Address     *string        `json:"address"`
+	Hours       *string        `json:"hours"`
+	MapURL      *string        `json:"map_url"`
+	Intro       *string        `json:"intro"`
+	Legal       *string        `json:"legal"`
+	AboutText   *string        `json:"about_text"`
+	AboutKey    *string        `json:"about_key"`
+	WelcomeBody *string        `json:"welcome_body"`
+	SignerName  *string        `json:"signer_name"`
+	SignerTitle *string        `json:"signer_title"`
+	Highlights  *[]domain.Stat `json:"highlights"`
+	Doctor      *domain.Doctor `json:"doctor"`
+	Lab         *domain.Lab    `json:"lab"`
+	Awards      *domain.Awards `json:"awards"`
+	Hotel       *domain.Hotel  `json:"hotel"`
 }
 
 func (h *Handler) getWorkspace(w http.ResponseWriter, r *http.Request) {
@@ -80,19 +123,6 @@ func (h *Handler) getSettings(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, toSettingsResponse(st))
 }
 
-type patchSettingsRequest struct {
-	WorkspaceID *string `json:"workspace_id,omitempty"`
-	Name        *string `json:"name"`
-	Locale      *string `json:"locale"`
-	Currency    *string `json:"currency"`
-	Palette     *string `json:"palette"`
-	LogoKey     *string `json:"logo_key"`
-	Phone       *string `json:"phone"`
-	MapURL      *string `json:"map_url"`
-	Intro       *string `json:"intro"`
-	Legal       *string `json:"legal"`
-}
-
 func (h *Handler) patchSettings(w http.ResponseWriter, r *http.Request) {
 	rawClinicID := ctxkey.ClinicID(r.Context())
 	if rawClinicID == "" {
@@ -111,22 +141,37 @@ func (h *Handler) patchSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// workspace_id cannot be taken from request body or changed to another workspace
 	if req.WorkspaceID != nil && *req.WorkspaceID != "" && *req.WorkspaceID != rawClinicID {
 		httpx.WriteError(w, errx.New("invalid_workspace_id", "workspace_id cannot be set from body", errx.ErrForbidden))
 		return
 	}
 
 	out, err := h.svc.UpdateSettings(r.Context(), wsID, app.UpdateSettingsInput{
-		Name:     req.Name,
-		Locale:   req.Locale,
-		Currency: req.Currency,
-		Palette:  req.Palette,
-		LogoKey:  req.LogoKey,
-		Phone:    req.Phone,
-		MapURL:   req.MapURL,
-		Intro:    req.Intro,
-		Legal:    req.Legal,
+		Name:        req.Name,
+		Slogan:      req.Slogan,
+		Locale:      req.Locale,
+		Currency:    req.Currency,
+		Palette:     req.Palette,
+		LogoKey:     req.LogoKey,
+		CoverKey:    req.CoverKey,
+		Phone:       req.Phone,
+		Email:       req.Email,
+		Website:     req.Website,
+		Address:     req.Address,
+		Hours:       req.Hours,
+		MapURL:      req.MapURL,
+		Intro:       req.Intro,
+		Legal:       req.Legal,
+		AboutText:   req.AboutText,
+		AboutKey:    req.AboutKey,
+		WelcomeBody: req.WelcomeBody,
+		SignerName:  req.SignerName,
+		SignerTitle: req.SignerTitle,
+		Highlights:  req.Highlights,
+		Doctor:      req.Doctor,
+		Lab:         req.Lab,
+		Awards:      req.Awards,
+		Hotel:       req.Hotel,
 	})
 	if err != nil {
 		httpx.WriteError(w, err)
@@ -137,16 +182,36 @@ func (h *Handler) patchSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func toSettingsResponse(s domain.Settings) settingsResponse {
+	highlights := s.Highlights
+	if highlights == nil {
+		highlights = []domain.Stat{}
+	}
 	return settingsResponse{
 		WorkspaceID: s.WorkspaceID.String(),
 		Name:        s.Name,
+		Slogan:      s.Slogan,
 		Locale:      string(s.Locale),
 		Currency:    string(s.Currency),
 		Palette:     string(s.Palette),
 		LogoKey:     s.LogoKey,
+		CoverKey:    s.CoverKey,
 		Phone:       s.Phone,
+		Email:       s.Email,
+		Website:     s.Website,
+		Address:     s.Address,
+		Hours:       s.Hours,
 		MapURL:      s.MapURL,
 		Intro:       s.Intro,
 		Legal:       s.Legal,
+		AboutText:   s.AboutText,
+		AboutKey:    s.AboutKey,
+		WelcomeBody: s.WelcomeBody,
+		SignerName:  s.SignerName,
+		SignerTitle: s.SignerTitle,
+		Highlights:  highlights,
+		Doctor:      s.Doctor,
+		Lab:         s.Lab,
+		Awards:      s.Awards,
+		Hotel:       s.Hotel,
 	}
 }
