@@ -115,6 +115,7 @@ func (s *Store) ListPlans(ctx context.Context, wsID id.ID) ([]domain.Plan, error
 		rows, err := tx.Query(ctx, `
 			SELECT p.id, p.workspace_id, p.patient_id, p.title, p.kind, p.status, p.currency,
 			       p.palette, p.locale, p.diagnoses, p.situation_json,
+			       p.welcome_letter, p.video_url, p.before_after_case_ids,
 			       p.totals_subtotal, p.totals_discount, p.totals_grand,
 			       p.snapshot_json, p.created_at, p.updated_at,
 			       pat.name, pat.contact_encrypted
@@ -132,6 +133,8 @@ func (s *Store) ListPlans(ctx context.Context, wsID id.ID) ([]domain.Plan, error
 			var pl domain.Plan
 			var pID, wsUUID, patID pgtype.UUID
 			var kind, status, curr, palette, locale string
+			var welcomeLetter, videoURL string
+			var baCaseIDs []string
 			var diagJSON []byte
 			var sitJSON []byte
 			var snapJSON []byte
@@ -140,6 +143,7 @@ func (s *Store) ListPlans(ctx context.Context, wsID id.ID) ([]domain.Plan, error
 			if err := rows.Scan(
 				&pID, &wsUUID, &patID, &pl.Title, &kind, &status, &curr,
 				&palette, &locale, &diagJSON, &sitJSON,
+				&welcomeLetter, &videoURL, &baCaseIDs,
 				&pl.TotalsSubtotal, &pl.TotalsDiscount, &pl.TotalsGrand,
 				&snapJSON, &pl.CreatedAt, &pl.UpdatedAt,
 				&patName, &patContact,
@@ -154,6 +158,9 @@ func (s *Store) ListPlans(ctx context.Context, wsID id.ID) ([]domain.Plan, error
 			pl.Currency = money.Currency(curr)
 			pl.Palette, _ = domain.ParsePalette(palette)
 			pl.Locale, _ = domain.ParseLocale(locale)
+			pl.WelcomeLetter = welcomeLetter
+			pl.VideoURL = videoURL
+			pl.BeforeAfterCaseIDs = baCaseIDs
 
 			if len(diagJSON) > 0 {
 				_ = json.Unmarshal(diagJSON, &pl.Diagnoses)
@@ -219,6 +226,8 @@ func (s *Store) GetPlan(ctx context.Context, wsID id.ID, planID id.ID) (domain.P
 		}
 		var pID, wsUUID, patID pgtype.UUID
 		var kind, status, curr, palette, locale string
+		var welcomeLetter, videoURL string
+		var baCaseIDs []string
 		var diagJSON []byte
 		var sitJSON []byte
 		var snapJSON []byte
@@ -226,6 +235,7 @@ func (s *Store) GetPlan(ctx context.Context, wsID id.ID, planID id.ID) (domain.P
 		row := tx.QueryRow(ctx, `
 			SELECT id, workspace_id, patient_id, title, kind, status, currency,
 			       palette, locale, diagnoses, situation_json,
+			       welcome_letter, video_url, before_after_case_ids,
 			       totals_subtotal, totals_discount, totals_grand,
 			       snapshot_json, created_at, updated_at
 			FROM plans
@@ -235,6 +245,7 @@ func (s *Store) GetPlan(ctx context.Context, wsID id.ID, planID id.ID) (domain.P
 		if err := row.Scan(
 			&pID, &wsUUID, &patID, &pl.Title, &kind, &status, &curr,
 			&palette, &locale, &diagJSON, &sitJSON,
+			&welcomeLetter, &videoURL, &baCaseIDs,
 			&pl.TotalsSubtotal, &pl.TotalsDiscount, &pl.TotalsGrand,
 			&snapJSON, &pl.CreatedAt, &pl.UpdatedAt,
 		); err != nil {
@@ -252,6 +263,9 @@ func (s *Store) GetPlan(ctx context.Context, wsID id.ID, planID id.ID) (domain.P
 		pl.Currency = money.Currency(curr)
 		pl.Palette, _ = domain.ParsePalette(palette)
 		pl.Locale, _ = domain.ParseLocale(locale)
+		pl.WelcomeLetter = welcomeLetter
+		pl.VideoURL = videoURL
+		pl.BeforeAfterCaseIDs = baCaseIDs
 
 		if len(diagJSON) > 0 {
 			_ = json.Unmarshal(diagJSON, &pl.Diagnoses)
@@ -366,12 +380,17 @@ func (s *Store) CreatePlan(ctx context.Context, p domain.Plan) error {
 		}
 		diagJSON, _ := json.Marshal(p.Diagnoses)
 		sitJSON, _ := json.Marshal(p.Situation)
+		baCaseIDs := p.BeforeAfterCaseIDs
+		if baCaseIDs == nil {
+			baCaseIDs = []string{}
+		}
 		tag, err := tx.Exec(ctx, `
 			INSERT INTO plans (
 				id, workspace_id, patient_id, title, kind, status, currency,
 				palette, locale, diagnoses, situation_json,
+				welcome_letter, video_url, before_after_case_ids,
 				totals_subtotal, totals_discount, totals_grand
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		`,
 			toUUID(p.ID),
 			toUUID(p.WorkspaceID),
@@ -384,6 +403,9 @@ func (s *Store) CreatePlan(ctx context.Context, p domain.Plan) error {
 			string(p.Locale),
 			diagJSON,
 			sitJSON,
+			p.WelcomeLetter,
+			p.VideoURL,
+			baCaseIDs,
 			p.TotalsSubtotal,
 			p.TotalsDiscount,
 			p.TotalsGrand,
@@ -405,13 +427,20 @@ func (s *Store) UpdatePlanHeader(ctx context.Context, p domain.Plan) error {
 		}
 		diagJSON, _ := json.Marshal(p.Diagnoses)
 		sitJSON, _ := json.Marshal(p.Situation)
+		baCaseIDs := p.BeforeAfterCaseIDs
+		if baCaseIDs == nil {
+			baCaseIDs = []string{}
+		}
 		tag, err := tx.Exec(ctx, `
 			UPDATE plans
 			SET title = $3, diagnoses = $4, situation_json = $5, palette = $6, locale = $7, currency = $8,
-			    totals_subtotal = $9, totals_discount = $10, totals_grand = $11, updated_at = now()
+			    totals_subtotal = $9, totals_discount = $10, totals_grand = $11,
+			    welcome_letter = $12, video_url = $13, before_after_case_ids = $14,
+			    updated_at = now()
 			WHERE workspace_id = $1 AND id = $2 AND status = 'draft'
 		`, toUUID(p.WorkspaceID), toUUID(p.ID), p.Title, diagJSON, sitJSON, string(p.Palette), string(p.Locale), string(p.Currency),
-		   p.TotalsSubtotal, p.TotalsDiscount, p.TotalsGrand)
+			p.TotalsSubtotal, p.TotalsDiscount, p.TotalsGrand,
+			p.WelcomeLetter, p.VideoURL, baCaseIDs)
 		if err != nil {
 			return err
 		}

@@ -91,8 +91,8 @@ func TestGetWorkspaceProducts(t *testing.T) {
 	if res.Products[0].ID != "classic" || !res.Products[0].Open {
 		t.Fatalf("classic must be open: %+v", res.Products[0])
 	}
-	if res.Products[1].ID != "ultimate" || res.Products[1].Open {
-		t.Fatalf("ultimate must be closed: %+v", res.Products[1])
+	if res.Products[1].ID != "ultimate" || !res.Products[1].Open {
+		t.Fatalf("ultimate must be open: %+v", res.Products[1])
 	}
 
 	// Test GET /v1/workspace

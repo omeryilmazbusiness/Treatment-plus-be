@@ -396,4 +396,3 @@ func fromUUID(u pgtype.UUID) id.ID {
 	}
 	return out
 }
-

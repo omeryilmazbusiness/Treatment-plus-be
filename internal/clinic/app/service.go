@@ -57,6 +57,10 @@ type UpdateSettingsInput struct {
 	Lab         *domain.Lab
 	Awards      *domain.Awards
 	Hotel       *domain.Hotel
+	Team        *[]domain.Doctor
+	Reviews     *[]domain.Review
+	BeforeAfter *[]domain.BeforeAfterCase
+	CTA         *domain.CTAConfig
 }
 
 func (s *Service) UpdateSettings(ctx context.Context, workspaceID id.ID, input UpdateSettingsInput) (domain.Settings, error) {
@@ -138,6 +142,33 @@ func (s *Service) UpdateSettings(ctx context.Context, workspaceID id.ID, input U
 	if input.Hotel != nil {
 		current.Hotel = input.Hotel.Normalize()
 	}
+	if input.Team != nil {
+		current.Team = nil
+		for _, doc := range *input.Team {
+			if n := doc.Normalize(); n.Name != "" {
+				current.Team = append(current.Team, n)
+			}
+		}
+	}
+	if input.Reviews != nil {
+		current.Reviews = nil
+		for _, rev := range *input.Reviews {
+			if n := rev.Normalize(); n.Author != "" || n.Text != "" {
+				current.Reviews = append(current.Reviews, n)
+			}
+		}
+	}
+	if input.BeforeAfter != nil {
+		current.BeforeAfter = nil
+		for _, ba := range *input.BeforeAfter {
+			if n := ba.Normalize(); n.Title != "" || n.BeforeImageKey != "" || n.AfterImageKey != "" {
+				current.BeforeAfter = append(current.BeforeAfter, n)
+			}
+		}
+	}
+	if input.CTA != nil {
+		current.CTA = input.CTA.Normalize()
+	}
 
 	if err := current.Validate(); err != nil {
 		return domain.Settings{}, err
@@ -178,6 +209,10 @@ type OnboardInput struct {
 	Lab          domain.Lab
 	Awards       domain.Awards
 	Hotel        domain.Hotel
+	Team         []domain.Doctor
+	Reviews      []domain.Review
+	BeforeAfter  []domain.BeforeAfterCase
+	CTA          domain.CTAConfig
 	RequireBrand bool
 }
 
@@ -208,6 +243,10 @@ func (s *Service) Onboard(ctx context.Context, workspaceID id.ID, input OnboardI
 		Lab:          input.Lab,
 		Awards:       input.Awards,
 		Hotel:        input.Hotel,
+		Team:         input.Team,
+		Reviews:      input.Reviews,
+		BeforeAfter:  input.BeforeAfter,
+		CTA:          input.CTA,
 		RequireBrand: input.RequireBrand,
 	})
 	if err != nil {

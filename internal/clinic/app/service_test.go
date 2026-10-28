@@ -142,7 +142,7 @@ func TestService_GetProducts(t *testing.T) {
 	if prods[0].ID != "classic" || !prods[0].Open {
 		t.Fatalf("classic must be open")
 	}
-	if prods[1].ID != "ultimate" || prods[1].Open {
-		t.Fatalf("ultimate must be closed")
+	if prods[1].ID != "ultimate" || !prods[1].Open {
+		t.Fatalf("ultimate must be open")
 	}
 }

@@ -86,3 +86,71 @@ func (h Hotel) Normalize() Hotel {
 		ImageKey: strings.TrimSpace(h.ImageKey),
 	}
 }
+
+type Review struct {
+	Author   string `json:"author"`
+	Rating   int    `json:"rating"`
+	Text     string `json:"text"`
+	Source   string `json:"source"`
+	Date     string `json:"date,omitempty"`
+	Verified bool   `json:"verified"`
+}
+
+func (r Review) Normalize() Review {
+	rating := r.Rating
+	if rating < 1 {
+		rating = 5
+	} else if rating > 5 {
+		rating = 5
+	}
+	src := strings.TrimSpace(r.Source)
+	if src == "" {
+		src = "Google"
+	}
+	return Review{
+		Author:   strings.TrimSpace(r.Author),
+		Rating:   rating,
+		Text:     strings.TrimSpace(r.Text),
+		Source:   src,
+		Date:     strings.TrimSpace(r.Date),
+		Verified: r.Verified,
+	}
+}
+
+type BeforeAfterCase struct {
+	ID             string `json:"id"`
+	Title          string `json:"title"`
+	Tag            string `json:"tag"`
+	Description    string `json:"description"`
+	BeforeImageKey string `json:"before_image_key"`
+	AfterImageKey  string `json:"after_image_key"`
+}
+
+func (b BeforeAfterCase) Normalize() BeforeAfterCase {
+	return BeforeAfterCase{
+		ID:             strings.TrimSpace(b.ID),
+		Title:          strings.TrimSpace(b.Title),
+		Tag:            strings.TrimSpace(b.Tag),
+		Description:    strings.TrimSpace(b.Description),
+		BeforeImageKey: strings.TrimSpace(b.BeforeImageKey),
+		AfterImageKey:  strings.TrimSpace(b.AfterImageKey),
+	}
+}
+
+type CTAConfig struct {
+	WhatsAppNumber   string `json:"whatsapp_number"`
+	WhatsAppMessage  string `json:"whatsapp_message"`
+	PhoneNumber      string `json:"phone_number"`
+	BookingURL       string `json:"booking_url"`
+	EnableAcceptance bool   `json:"enable_acceptance"`
+}
+
+func (c CTAConfig) Normalize() CTAConfig {
+	return CTAConfig{
+		WhatsAppNumber:   strings.TrimSpace(c.WhatsAppNumber),
+		WhatsAppMessage:  strings.TrimSpace(c.WhatsAppMessage),
+		PhoneNumber:      strings.TrimSpace(c.PhoneNumber),
+		BookingURL:       strings.TrimSpace(c.BookingURL),
+		EnableAcceptance: c.EnableAcceptance,
+	}
+}

@@ -37,7 +37,9 @@ import (
 	"github.com/treatment-plus/treatment-plus-be/internal/platform/httpx"
 	"github.com/treatment-plus/treatment-plus-be/internal/platform/postgres"
 	"github.com/treatment-plus/treatment-plus-be/internal/platform/redisx"
+	shareapp "github.com/treatment-plus/treatment-plus-be/internal/share/app"
 	sharehttp "github.com/treatment-plus/treatment-plus-be/internal/share/http"
+	sharepg "github.com/treatment-plus/treatment-plus-be/internal/share/pg"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/clock"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/crypto"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/errx"
@@ -233,6 +235,16 @@ func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, err
 	outputSvc := outputapp.NewService(outputStore, outputpdf.NewRenderer(), mediaSvc, outputStore, outputpdf.AwardJPEG())
 	vizSvc := vizapp.NewService(&planVizAdapter{svc: planSvc})
 
+	shareStore := sharepg.New(pool)
+	shareSvc := shareapp.NewService(
+		shareStore,
+		&sharePlanAdapter{svc: planSvc},
+		&shareClinicAdapter{svc: clinicSvc},
+		&shareVizAdapter{svc: vizSvc},
+		&sharePDFAdapter{svc: outputSvc},
+		cfg.App.URL,
+	)
+
 	srv := httpx.NewServer(httpx.Options{
 		Config: cfg,
 		Log:    log,
@@ -248,7 +260,7 @@ func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, err
 			mediahttp.NewHandler(mediaSvc, tokens),
 			outputhttp.NewHandler(outputSvc, tokens),
 			vizhttp.NewHandler(vizSvc, tokens),
-			sharehttp.NewHandler(),
+			sharehttp.NewHandler(shareSvc, tokens),
 			aihttp.NewHandler(),
 		},
 	})
@@ -277,6 +289,266 @@ func (a *planVizAdapter) GetReadyItems(ctx context.Context, workspaceID, planID 
 		})
 	}
 	return string(p.Locale), p.ID.String(), items, nil
+}
+
+type sharePlanAdapter struct {
+	svc *planapp.Service
+}
+
+func (a *sharePlanAdapter) GetPlanForShare(ctx context.Context, clinicID, planID id.ID) (shareapp.SharedPlanData, error) {
+	p, err := a.svc.GetPlan(ctx, clinicID, planID)
+	if err != nil {
+		return shareapp.SharedPlanData{}, err
+	}
+	patName := ""
+	if p.Patient != nil {
+		patName = p.Patient.Name
+	}
+
+	visits := make([]shareapp.SharedVisit, 0, len(p.Visits))
+	items := make([]shareapp.SharedItem, 0, len(p.Items))
+
+	itemsByVisit := make(map[string][]shareapp.SharedItem)
+	for _, it := range p.Items {
+		var vIDStr *string
+		if it.VisitID != nil {
+			s := it.VisitID.String()
+			vIDStr = &s
+		}
+		itemDTO := shareapp.SharedItem{
+			ID:            it.ID.String(),
+			VisitID:       vIDStr,
+			TreatmentName: it.TreatmentName,
+			AnimationCode: it.AnimationCode,
+			ToothNumber:   it.ToothNumber,
+			Teeth:         it.Teeth,
+			Description:   it.Description,
+			Quantity:      it.Quantity,
+			UnitPrice:     it.UnitPrice,
+			IsPackage:     it.IsPackage,
+		}
+		items = append(items, itemDTO)
+		if vIDStr != nil {
+			itemsByVisit[*vIDStr] = append(itemsByVisit[*vIDStr], itemDTO)
+		}
+	}
+
+	for _, v := range p.Visits {
+		vIDStr := v.ID.String()
+		visits = append(visits, shareapp.SharedVisit{
+			ID:          vIDStr,
+			OrderNum:    v.OrderNum,
+			Title:       v.Title,
+			PhaseLabel:  v.PhaseLabel,
+			HealingNote: v.HealingNote,
+			ChartTeeth:  v.ChartTeeth,
+			Items:       itemsByVisit[vIDStr],
+		})
+	}
+
+	discounts := make([]shareapp.SharedDiscount, 0, len(p.Discounts))
+	for _, d := range p.Discounts {
+		discounts = append(discounts, shareapp.SharedDiscount{
+			ID:     d.ID.String(),
+			Label:  d.Label,
+			Amount: d.Amount,
+		})
+	}
+
+	findings := make([]shareapp.SharedToothFinding, 0, len(p.Situation.ToothFindings))
+	for _, f := range p.Situation.ToothFindings {
+		findings = append(findings, shareapp.SharedToothFinding{
+			Tooth:  f.Tooth,
+			Status: f.Status,
+			Note:   f.Note,
+		})
+	}
+
+	return shareapp.SharedPlanData{
+		ID:                 p.ID,
+		ClinicID:           p.WorkspaceID,
+		PatientName:        patName,
+		Title:              p.Title,
+		Kind:               string(p.Kind),
+		Status:             string(p.Status),
+		Currency:           string(p.Currency),
+		Palette:            string(p.Palette),
+		Locale:             string(p.Locale),
+		WelcomeLetter:      p.WelcomeLetter,
+		VideoURL:           p.VideoURL,
+		BeforeAfterCaseIDs: p.BeforeAfterCaseIDs,
+		Diagnoses:          p.Diagnoses,
+		Situation: shareapp.SharedSituation{
+			XrayKey:          p.Situation.XrayKey,
+			ChartTeeth:       p.Situation.ChartTeeth,
+			ToothFindings:    findings,
+			GeneralDiagnoses: p.Situation.GeneralDiagnoses,
+		},
+		Visits:         visits,
+		Items:          items,
+		Discounts:      discounts,
+		TotalsSubtotal: p.TotalsSubtotal,
+		TotalsDiscount: p.TotalsDiscount,
+		TotalsGrand:    p.TotalsGrand,
+		CreatedAt:      p.CreatedAt,
+	}, nil
+}
+
+type shareClinicAdapter struct {
+	svc *clinicapp.Service
+}
+
+func (a *shareClinicAdapter) GetClinicBrand(ctx context.Context, clinicID id.ID) (shareapp.SharedClinicData, error) {
+	st, err := a.svc.GetSettings(ctx, clinicID)
+	if err != nil {
+		return shareapp.SharedClinicData{}, err
+	}
+
+	highlights := make([]shareapp.SharedStat, 0, len(st.Highlights))
+	for _, h := range st.Highlights {
+		highlights = append(highlights, shareapp.SharedStat{Value: h.Value, Label: h.Label})
+	}
+
+	docStats := make([]shareapp.SharedStat, 0, len(st.Doctor.Stats))
+	for _, s := range st.Doctor.Stats {
+		docStats = append(docStats, shareapp.SharedStat{Value: s.Value, Label: s.Label})
+	}
+
+	labStats := make([]shareapp.SharedStat, 0, len(st.Lab.Stats))
+	for _, s := range st.Lab.Stats {
+		labStats = append(labStats, shareapp.SharedStat{Value: s.Value, Label: s.Label})
+	}
+
+	team := make([]shareapp.SharedDoctor, 0, len(st.Team))
+	for _, d := range st.Team {
+		dStats := make([]shareapp.SharedStat, 0, len(d.Stats))
+		for _, s := range d.Stats {
+			dStats = append(dStats, shareapp.SharedStat{Value: s.Value, Label: s.Label})
+		}
+		team = append(team, shareapp.SharedDoctor{
+			Name:     d.Name,
+			Title:    d.Title,
+			Subtitle: d.Subtitle,
+			Bio:      d.Bio,
+			PhotoKey: d.PhotoKey,
+			Stats:    dStats,
+		})
+	}
+
+	reviews := make([]shareapp.SharedReview, 0, len(st.Reviews))
+	for _, r := range st.Reviews {
+		reviews = append(reviews, shareapp.SharedReview{
+			Author:   r.Author,
+			Rating:   r.Rating,
+			Text:     r.Text,
+			Source:   r.Source,
+			Date:     r.Date,
+			Verified: r.Verified,
+		})
+	}
+
+	ba := make([]shareapp.SharedBeforeAfterCase, 0, len(st.BeforeAfter))
+	for _, b := range st.BeforeAfter {
+		ba = append(ba, shareapp.SharedBeforeAfterCase{
+			ID:             b.ID,
+			Title:          b.Title,
+			Tag:            b.Tag,
+			Description:    b.Description,
+			BeforeImageKey: b.BeforeImageKey,
+			AfterImageKey:  b.AfterImageKey,
+		})
+	}
+
+	return shareapp.SharedClinicData{
+		Name:        st.Name,
+		Slogan:      st.Slogan,
+		Phone:       st.Phone,
+		Email:       st.Email,
+		Website:     st.Website,
+		Address:     st.Address,
+		Hours:       st.Hours,
+		LogoKey:     st.LogoKey,
+		CoverKey:    st.CoverKey,
+		MapURL:      st.MapURL,
+		Intro:       st.Intro,
+		Legal:       st.Legal,
+		AboutText:   st.AboutText,
+		AboutKey:    st.AboutKey,
+		WelcomeBody: st.WelcomeBody,
+		SignerName:  st.SignerName,
+		SignerTitle: st.SignerTitle,
+		Highlights:  highlights,
+		Doctor: shareapp.SharedDoctor{
+			Name:     st.Doctor.Name,
+			Title:    st.Doctor.Title,
+			Subtitle: st.Doctor.Subtitle,
+			Bio:      st.Doctor.Bio,
+			PhotoKey: st.Doctor.PhotoKey,
+			Stats:    docStats,
+		},
+		Lab: shareapp.SharedLab{
+			Title:    st.Lab.Title,
+			Text:     st.Lab.Text,
+			ImageKey: st.Lab.ImageKey,
+			Stats:    labStats,
+		},
+		Awards: shareapp.SharedAwards{
+			Text:      st.Awards.Text,
+			BadgeKeys: st.Awards.BadgeKeys,
+		},
+		Hotel: shareapp.SharedHotel{
+			Name:     st.Hotel.Name,
+			Text:     st.Hotel.Text,
+			ImageKey: st.Hotel.ImageKey,
+		},
+		Team:        team,
+		Reviews:     reviews,
+		BeforeAfter: ba,
+		CTA: shareapp.SharedCTAConfig{
+			WhatsAppNumber:   st.CTA.WhatsAppNumber,
+			WhatsAppMessage:  st.CTA.WhatsAppMessage,
+			PhoneNumber:      st.CTA.PhoneNumber,
+			BookingURL:       st.CTA.BookingURL,
+			EnableAcceptance: st.CTA.EnableAcceptance,
+		},
+	}, nil
+}
+
+type shareVizAdapter struct {
+	svc *vizapp.Service
+}
+
+func (a *shareVizAdapter) GetVizPlaylist(ctx context.Context, clinicID, planID id.ID) (shareapp.SharedVizPlaylist, error) {
+	pl, err := a.svc.Playlist(ctx, clinicID, planID)
+	if err != nil {
+		return shareapp.SharedVizPlaylist{}, err
+	}
+	clips := make([]shareapp.SharedVizClip, 0, len(pl.Clips))
+	for _, c := range pl.Clips {
+		clips = append(clips, shareapp.SharedVizClip{
+			Code:  string(c.Code),
+			Teeth: c.Teeth,
+			Title: c.Title,
+			Moves: c.Moves,
+		})
+	}
+	return shareapp.SharedVizPlaylist{
+		PlanID: pl.PlanID,
+		Locale: pl.Locale,
+		Clips:  clips,
+	}, nil
+}
+
+type sharePDFAdapter struct {
+	svc *outputapp.Service
+}
+
+func (a *sharePDFAdapter) GetPlanPDF(ctx context.Context, clinicID, planID id.ID) ([]byte, error) {
+	doc, err := a.svc.Get(ctx, clinicID, planID)
+	if err != nil {
+		return nil, err
+	}
+	return doc.Bytes, nil
 }
 
 func (a *API) Close() {

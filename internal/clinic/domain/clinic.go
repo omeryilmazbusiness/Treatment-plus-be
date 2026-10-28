@@ -86,6 +86,10 @@ type Settings struct {
 	Lab         Lab
 	Awards      Awards
 	Hotel       Hotel
+	Team        []Doctor
+	Reviews     []Review
+	BeforeAfter []BeforeAfterCase
+	CTA         CTAConfig
 }
 
 func (s Settings) ClinicID() id.ID {
@@ -145,6 +149,10 @@ type OnboardInput struct {
 	Lab          Lab
 	Awards       Awards
 	Hotel        Hotel
+	Team         []Doctor
+	Reviews      []Review
+	BeforeAfter  []BeforeAfterCase
+	CTA          CTAConfig
 	RequireBrand bool
 }
 
@@ -196,6 +204,22 @@ func Onboard(workspaceID id.ID, in OnboardInput) (Settings, error) {
 	s.Lab = in.Lab.Normalize()
 	s.Awards = in.Awards.Normalize()
 	s.Hotel = in.Hotel.Normalize()
+	for _, doc := range in.Team {
+		if n := doc.Normalize(); n.Name != "" {
+			s.Team = append(s.Team, n)
+		}
+	}
+	for _, rev := range in.Reviews {
+		if n := rev.Normalize(); n.Author != "" || n.Text != "" {
+			s.Reviews = append(s.Reviews, n)
+		}
+	}
+	for _, ba := range in.BeforeAfter {
+		if n := ba.Normalize(); n.Title != "" || n.BeforeImageKey != "" || n.AfterImageKey != "" {
+			s.BeforeAfter = append(s.BeforeAfter, n)
+		}
+	}
+	s.CTA = in.CTA.Normalize()
 
 	if in.RequireBrand {
 		if s.Name == "" {
@@ -234,6 +258,6 @@ type Product struct {
 func AvailableProducts() []Product {
 	return []Product{
 		{ID: "classic", Open: true},
-		{ID: "ultimate", Open: false},
+		{ID: "ultimate", Open: true},
 	}
 }
