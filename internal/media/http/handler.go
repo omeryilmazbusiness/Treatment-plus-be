@@ -3,6 +3,8 @@ package http
 import (
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -31,6 +33,44 @@ func (h *Handler) Register(r chi.Router) {
 		}
 		r.Post("/media", h.upload)
 	})
+	r.Get("/media/*", h.serve)
+}
+
+func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
+	key := chi.URLParam(r, "*")
+	if key == "" {
+		key = r.URL.Query().Get("key")
+	}
+	key = strings.TrimPrefix(key, "/")
+	if key == "" {
+		httpx.WriteError(w, errx.New("invalid_key", "media key required", errx.ErrInvalid))
+		return
+	}
+
+	parts := strings.Split(key, "/")
+	if len(parts) < 3 {
+		httpx.WriteError(w, errx.New("invalid_key", "invalid media key format", errx.ErrInvalid))
+		return
+	}
+	wsID, err := id.Parse(parts[0])
+	if err != nil {
+		httpx.WriteError(w, errx.New("invalid_key", "invalid workspace id in key", errx.ErrInvalid))
+		return
+	}
+
+	ctx := ctxkey.WithClinicID(r.Context(), wsID.String())
+
+	asset, err := h.svc.Get(ctx, wsID, key)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", asset.ContentType)
+	w.Header().Set("Content-Length", strconv.Itoa(len(asset.Bytes)))
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(asset.Bytes)
 }
 
 func (h *Handler) upload(w http.ResponseWriter, r *http.Request) {

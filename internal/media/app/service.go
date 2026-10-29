@@ -67,6 +67,8 @@ func sniff(declared string, raw []byte) string {
 		return "image/jpeg"
 	case "image/png":
 		return "image/png"
+	case "image/webp":
+		return "image/webp"
 	default:
 		return declared
 	}

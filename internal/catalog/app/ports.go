@@ -15,6 +15,7 @@ type CatalogStore interface {
 	ListTreatments(ctx context.Context, wsID id.ID, includeInactive bool) ([]domain.Treatment, error)
 	GetTreatment(ctx context.Context, wsID id.ID, treatID id.ID) (domain.Treatment, error)
 	SaveTreatment(ctx context.Context, t domain.Treatment) error
+	DeleteTreatment(ctx context.Context, wsID id.ID, treatID id.ID) error
 
 	ListPriceLists(ctx context.Context, wsID id.ID) ([]domain.PriceList, error)
 	GetPriceList(ctx context.Context, wsID id.ID, listID id.ID) (domain.PriceList, []domain.PriceItem, error)

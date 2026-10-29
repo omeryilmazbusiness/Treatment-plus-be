@@ -240,9 +240,9 @@ func (d *doc) legend(x, y float64) {
 		c domain.RGB
 		l string
 	}{
-		{domain.RGB{180, 210, 170}, d.copy.Intact},
-		{domain.RGB{220, 80, 80}, d.copy.Missing},
-		{domain.RGB{90, 160, 220}, d.copy.Filled},
+		{domain.RGB{R: 180, G: 210, B: 170}, d.copy.Intact},
+		{domain.RGB{R: 220, G: 80, B: 80}, d.copy.Missing},
+		{domain.RGB{R: 90, G: 160, B: 220}, d.copy.Filled},
 		{d.theme.Accent, d.copy.Crown},
 	}
 	for i, it := range items {

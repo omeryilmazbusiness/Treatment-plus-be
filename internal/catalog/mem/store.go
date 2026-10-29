@@ -140,6 +140,29 @@ func (s *Store) SaveTreatment(ctx context.Context, t domain.Treatment) error {
 	return nil
 }
 
+func (s *Store) DeleteTreatment(ctx context.Context, wsID id.ID, treatID id.ID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := denyWrite(ctx, wsID); err != nil {
+		return err
+	}
+	t, ok := s.treatments[treatID]
+	if !ok || t.WorkspaceID != wsID {
+		return errx.ErrNotFound
+	}
+	delete(s.treatments, treatID)
+	for listID, items := range s.priceItems {
+		var filtered []domain.PriceItem
+		for _, it := range items {
+			if it.TreatmentID != treatID {
+				filtered = append(filtered, it)
+			}
+		}
+		s.priceItems[listID] = filtered
+	}
+	return nil
+}
+
 func (s *Store) ListPriceLists(ctx context.Context, wsID id.ID) ([]domain.PriceList, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

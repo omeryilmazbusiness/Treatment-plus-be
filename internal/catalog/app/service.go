@@ -120,6 +120,13 @@ func (s *Service) UpdateTreatment(ctx context.Context, wsID id.ID, treatID id.ID
 	return current, nil
 }
 
+func (s *Service) DeleteTreatment(ctx context.Context, wsID id.ID, treatID id.ID) error {
+	if wsID.IsZero() || treatID.IsZero() {
+		return errx.New("invalid_id", "workspace and treatment id required", errx.ErrInvalid)
+	}
+	return s.store.DeleteTreatment(ctx, wsID, treatID)
+}
+
 // Price Lists
 func (s *Service) ListPriceLists(ctx context.Context, wsID id.ID) ([]domain.PriceList, error) {
 	if wsID.IsZero() {

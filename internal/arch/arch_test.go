@@ -1,9 +1,11 @@
 package arch_test
 
 import (
+	"errors"
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -136,5 +138,14 @@ func collectImports(t *testing.T, dir string) []string {
 }
 
 func osIsNotExist(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "no such file or directory")
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist) || os.IsNotExist(err) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "no such file or directory") ||
+		strings.Contains(msg, "The system cannot find the file specified") ||
+		strings.Contains(msg, "Sistem belirtilen dosyayı bulamıyor")
 }

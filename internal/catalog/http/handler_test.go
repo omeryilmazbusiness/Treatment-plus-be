@@ -93,6 +93,20 @@ func TestCatalogHTTP_DiagnosesAndTreatments(t *testing.T) {
 	if trRec.Code != http.StatusCreated {
 		t.Fatalf("POST /catalog/treatments failed: %d, body: %s", trRec.Code, trRec.Body.String())
 	}
+
+	var createdTr catalogdomain.Treatment
+	if err := json.Unmarshal(trRec.Body.Bytes(), &createdTr); err != nil {
+		t.Fatal(err)
+	}
+
+	delReq := httptest.NewRequest(http.MethodDelete, "/v1/catalog/treatments/"+createdTr.ID.String(), nil)
+	delReq.Header.Set("Authorization", "Bearer "+token)
+	delRec := httptest.NewRecorder()
+	r.ServeHTTP(delRec, delReq)
+
+	if delRec.Code != http.StatusOK {
+		t.Fatalf("DELETE /catalog/treatments failed: %d, body: %s", delRec.Code, delRec.Body.String())
+	}
 }
 
 func TestCatalogHTTP_RequiresAuth(t *testing.T) {

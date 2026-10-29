@@ -54,6 +54,9 @@ func DetectImage(raw []byte) string {
 	if len(raw) >= 8 && raw[0] == 0x89 && raw[1] == 0x50 && raw[2] == 0x4E && raw[3] == 0x47 {
 		return "image/png"
 	}
+	if len(raw) >= 12 && string(raw[0:4]) == "RIFF" && string(raw[8:12]) == "WEBP" {
+		return "image/webp"
+	}
 	return ""
 }
 
@@ -74,9 +77,9 @@ func (a Asset) Validate() error {
 		return err
 	}
 	switch a.ContentType {
-	case "image/jpeg", "image/png":
+	case "image/jpeg", "image/png", "image/webp":
 		return nil
 	default:
-		return errx.New("invalid_media_type", "only jpeg and png are accepted", errx.ErrInvalid)
+		return errx.New("invalid_media_type", "only jpeg, png and webp are accepted", errx.ErrInvalid)
 	}
 }

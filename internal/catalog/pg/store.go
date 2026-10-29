@@ -191,6 +191,42 @@ func (s *Store) SaveTreatment(ctx context.Context, t domain.Treatment) error {
 	})
 }
 
+func (s *Store) DeleteTreatment(ctx context.Context, wsID id.ID, treatID id.ID) error {
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if err := rls.Apply(ctx, tx); err != nil {
+			return err
+		}
+		// Delete price items for this treatment
+		_, err := tx.Exec(ctx, `
+			DELETE FROM price_items
+			WHERE workspace_id = $1 AND treatment_id = $2
+		`, toUUID(wsID), toUUID(treatID))
+		if err != nil {
+			return err
+		}
+		// Unlink from plan items so existing plan history remains intact
+		_, err = tx.Exec(ctx, `
+			UPDATE plan_items
+			SET treatment_id = NULL
+			WHERE workspace_id = $1 AND treatment_id = $2
+		`, toUUID(wsID), toUUID(treatID))
+		if err != nil {
+			return err
+		}
+		tag, err := tx.Exec(ctx, `
+			DELETE FROM treatments
+			WHERE workspace_id = $1 AND id = $2
+		`, toUUID(wsID), toUUID(treatID))
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return errx.ErrNotFound
+		}
+		return nil
+	})
+}
+
 func (s *Store) ListPriceLists(ctx context.Context, wsID id.ID) ([]domain.PriceList, error) {
 	var out []domain.PriceList
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {

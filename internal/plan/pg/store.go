@@ -205,6 +205,46 @@ func (s *Store) ListPlans(ctx context.Context, wsID id.ID) ([]domain.Plan, error
 					}
 				}
 			}
+
+			iRows, err := tx.Query(ctx, `
+				SELECT id, plan_id, visit_id, workspace_id, treatment_id, treatment_name,
+				       tooth_number, teeth, description, quantity, unit_price, is_package, order_num, animation_code, created_at, updated_at
+				FROM plan_items
+				WHERE workspace_id = $1
+				ORDER BY order_num ASC
+			`, toUUID(wsID))
+			if err == nil {
+				defer iRows.Close()
+				planMap := make(map[id.ID]*domain.Plan, len(out))
+				for i := range out {
+					planMap[out[i].ID] = &out[i]
+				}
+				for iRows.Next() {
+					var it domain.Item
+					var itID, itPlanID, itWsUUID pgtype.UUID
+					var itVisitID, itTrID pgtype.UUID
+					if err := iRows.Scan(
+						&itID, &itPlanID, &itVisitID, &itWsUUID, &itTrID, &it.TreatmentName,
+						&it.ToothNumber, &it.Teeth, &it.Description, &it.Quantity, &it.UnitPrice, &it.IsPackage, &it.OrderNum,
+						&it.AnimationCode, &it.CreatedAt, &it.UpdatedAt,
+					); err == nil {
+						it.ID = fromUUID(itID)
+						it.PlanID = fromUUID(itPlanID)
+						it.WorkspaceID = fromUUID(itWsUUID)
+						if itVisitID.Valid {
+							v := fromUUID(itVisitID)
+							it.VisitID = &v
+						}
+						if itTrID.Valid {
+							tr := fromUUID(itTrID)
+							it.TreatmentID = &tr
+						}
+						if target, ok := planMap[it.PlanID]; ok {
+							target.Items = append(target.Items, it)
+						}
+					}
+				}
+			}
 		}
 		return rows.Err()
 	})

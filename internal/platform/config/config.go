@@ -127,8 +127,8 @@ func Load() (Config, error) {
 			JWTAccessSecret:  env("JWT_ACCESS_SECRET", ""),
 			JWTRefreshSecret: env("JWT_REFRESH_SECRET", ""),
 			KMSKey:           env("KMS_KEY", ""),
-			AccessTTL:        envDuration("JWT_ACCESS_TTL", 15*time.Minute),
-			RefreshTTL:       envDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
+			AccessTTL:        envDuration("JWT_ACCESS_TTL", 30*24*time.Hour),
+			RefreshTTL:       envDuration("JWT_REFRESH_TTL", 30*24*time.Hour),
 		},
 		Object: Object{
 			Endpoint:  env("S3_ENDPOINT", ""),
@@ -240,3 +240,4 @@ func splitCSV(v string) []string {
 	}
 	return out
 }
+

@@ -37,6 +37,7 @@ func (h *Handler) Register(r chi.Router) {
 		r.Get("/catalog/treatments", h.listTreatments)
 		r.Post("/catalog/treatments", h.createTreatment)
 		r.Patch("/catalog/treatments/{id}", h.patchTreatment)
+		r.Delete("/catalog/treatments/{id}", h.deleteTreatment)
 
 		// Price lists
 		r.Get("/catalog/price-lists", h.listPriceLists)
@@ -188,6 +189,24 @@ func (h *Handler) patchTreatment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, t)
+}
+
+func (h *Handler) deleteTreatment(w http.ResponseWriter, r *http.Request) {
+	wsID, err := h.getWorkspaceID(r)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	treatID, err := id.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		httpx.WriteError(w, errx.New("invalid_id", "malformed treatment id", errx.ErrInvalid))
+		return
+	}
+	if err := h.svc.DeleteTreatment(r.Context(), wsID, treatID); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
 func (h *Handler) listPriceLists(w http.ResponseWriter, r *http.Request) {
