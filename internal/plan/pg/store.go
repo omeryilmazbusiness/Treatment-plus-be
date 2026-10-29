@@ -407,9 +407,11 @@ func (s *Store) UpdatePlanHeader(ctx context.Context, p domain.Plan) error {
 		sitJSON, _ := json.Marshal(p.Situation)
 		tag, err := tx.Exec(ctx, `
 			UPDATE plans
-			SET title = $3, diagnoses = $4, situation_json = $5, palette = $6, locale = $7, updated_at = now()
+			SET title = $3, diagnoses = $4, situation_json = $5, palette = $6, locale = $7, currency = $8,
+			    totals_subtotal = $9, totals_discount = $10, totals_grand = $11, updated_at = now()
 			WHERE workspace_id = $1 AND id = $2 AND status = 'draft'
-		`, toUUID(p.WorkspaceID), toUUID(p.ID), p.Title, diagJSON, sitJSON, string(p.Palette), string(p.Locale))
+		`, toUUID(p.WorkspaceID), toUUID(p.ID), p.Title, diagJSON, sitJSON, string(p.Palette), string(p.Locale), string(p.Currency),
+		   p.TotalsSubtotal, p.TotalsDiscount, p.TotalsGrand)
 		if err != nil {
 			return err
 		}

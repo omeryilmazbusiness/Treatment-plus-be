@@ -281,6 +281,7 @@ type patchPlanRequest struct {
 	Diagnoses *[]string         `json:"diagnoses"`
 	Palette   *string           `json:"palette"`
 	Locale    *string           `json:"locale"`
+	Currency  *string           `json:"currency"`
 	Situation *domain.Situation `json:"situation"`
 }
 
@@ -305,6 +306,7 @@ func (h *Handler) patchPlan(w http.ResponseWriter, r *http.Request) {
 		Diagnoses: req.Diagnoses,
 		Palette:   req.Palette,
 		Locale:    req.Locale,
+		Currency:  req.Currency,
 		Situation: req.Situation,
 	})
 	if err != nil {

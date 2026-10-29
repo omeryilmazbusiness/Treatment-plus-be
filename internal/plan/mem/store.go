@@ -149,7 +149,11 @@ func (s *Store) UpdatePlanHeader(ctx context.Context, p domain.Plan) error {
 	row.plan.Diagnoses = append([]string(nil), p.Diagnoses...)
 	row.plan.Palette = p.Palette
 	row.plan.Locale = p.Locale
+	row.plan.Currency = p.Currency
 	row.plan.Situation = p.Situation
+	row.plan.TotalsSubtotal = p.TotalsSubtotal
+	row.plan.TotalsDiscount = p.TotalsDiscount
+	row.plan.TotalsGrand = p.TotalsGrand
 	s.plans[p.ID] = row
 	return nil
 }

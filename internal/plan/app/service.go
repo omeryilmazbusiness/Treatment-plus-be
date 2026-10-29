@@ -226,6 +226,7 @@ type UpdatePlanHeaderInput struct {
 	Diagnoses *[]string
 	Palette   *string
 	Locale    *string
+	Currency  *string
 	Situation *domain.Situation
 }
 
@@ -253,6 +254,21 @@ func (s *Service) UpdatePlanHeader(ctx context.Context, wsID id.ID, planID id.ID
 			return domain.Plan{}, err
 		}
 		current.Locale = loc
+	}
+	if in.Currency != nil {
+		curr, err := moneyCurrency(*in.Currency)
+		if err != nil {
+			return domain.Plan{}, err
+		}
+		current.Currency = curr
+		if len(current.Items) > 0 || len(current.Discounts) > 0 {
+			totals, err := domain.CalculateTotals(current.Items, current.Discounts, current.Currency)
+			if err == nil {
+				current.TotalsSubtotal = totals.Subtotal
+				current.TotalsDiscount = totals.Discount
+				current.TotalsGrand = totals.Grand
+			}
+		}
 	}
 	if in.Situation != nil {
 		current.Situation = domain.MergeSituation(nil, *in.Situation)
@@ -751,6 +767,11 @@ func (s *Service) resolvePresentation(ctx context.Context, wsID id.ID, palette, 
 }
 
 func (s *Service) workspaceCurrency(ctx context.Context, wsID id.ID, fallback string) money.Currency {
+	if fallback != "" {
+		if curr, err := moneyCurrency(fallback); err == nil {
+			return curr
+		}
+	}
 	if s.settings != nil {
 		if st, err := s.settings.GetClinicSettings(ctx, wsID); err == nil {
 			if curr, err := moneyCurrency(st.Currency); err == nil {
@@ -758,11 +779,7 @@ func (s *Service) workspaceCurrency(ctx context.Context, wsID id.ID, fallback st
 			}
 		}
 	}
-	curr := money.Currency(strings.ToUpper(strings.TrimSpace(fallback)))
-	if !money.ValidCurrency(curr) {
-		return money.TRY
-	}
-	return curr
+	return money.TRY
 }
 
 func moneyCurrency(raw string) (money.Currency, error) {
