@@ -166,13 +166,17 @@ func (s *Service) GetPlan(ctx context.Context, wsID id.ID, planID id.ID) (domain
 }
 
 type CreatePlanInput struct {
-	PatientID id.ID            `json:"patient_id"`
-	Title     string           `json:"title"`
-	Currency  string           `json:"currency"`
-	Palette   string           `json:"palette"`
-	Locale    string           `json:"locale"`
-	Diagnoses []string         `json:"diagnoses"`
-	Situation domain.Situation `json:"situation"`
+	PatientID          id.ID            `json:"patient_id"`
+	Title              string           `json:"title"`
+	Kind               string           `json:"kind"`
+	Currency           string           `json:"currency"`
+	Palette            string           `json:"palette"`
+	Locale             string           `json:"locale"`
+	WelcomeLetter      string           `json:"welcome_letter"`
+	VideoURL           string           `json:"video_url"`
+	BeforeAfterCaseIDs []string         `json:"before_after_case_ids"`
+	Diagnoses          []string         `json:"diagnoses"`
+	Situation          domain.Situation `json:"situation"`
 }
 
 func (s *Service) CreatePlan(ctx context.Context, wsID id.ID, input CreatePlanInput) (domain.Plan, error) {
@@ -197,21 +201,31 @@ func (s *Service) CreatePlan(ctx context.Context, wsID id.ID, input CreatePlanIn
 	}
 	situation := domain.MergeSituation(input.Diagnoses, input.Situation)
 
+	planKind := domain.KindClassic
+	if input.Kind == string(domain.KindUltimate) {
+		planKind = domain.KindUltimate
+	} else if input.Kind == string(domain.KindBoth) {
+		planKind = domain.KindBoth
+	}
+
 	p := domain.Plan{
-		ID:             id.New(),
-		WorkspaceID:    wsID,
-		PatientID:      input.PatientID,
-		Title:          title,
-		Kind:           domain.KindClassic, // Only classic!
-		Status:         domain.StatusDraft,
-		Currency:       curr,
-		Palette:        palette,
-		Locale:         locale,
-		Diagnoses:      situation.Diagnoses(),
-		Situation:      situation,
-		TotalsSubtotal: 0,
-		TotalsDiscount: 0,
-		TotalsGrand:    0,
+		ID:                 id.New(),
+		WorkspaceID:        wsID,
+		PatientID:          input.PatientID,
+		Title:              title,
+		Kind:               planKind,
+		Status:             domain.StatusDraft,
+		Currency:           curr,
+		Palette:            palette,
+		Locale:             locale,
+		WelcomeLetter:      strings.TrimSpace(input.WelcomeLetter),
+		VideoURL:           strings.TrimSpace(input.VideoURL),
+		BeforeAfterCaseIDs: domain.CleanStrings(input.BeforeAfterCaseIDs),
+		Diagnoses:          situation.Diagnoses(),
+		Situation:          situation,
+		TotalsSubtotal:     0,
+		TotalsDiscount:     0,
+		TotalsGrand:        0,
 	}
 
 	if err := s.planStore.CreatePlan(ctx, p); err != nil {
@@ -222,12 +236,15 @@ func (s *Service) CreatePlan(ctx context.Context, wsID id.ID, input CreatePlanIn
 }
 
 type UpdatePlanHeaderInput struct {
-	Title     *string
-	Diagnoses *[]string
-	Palette   *string
-	Locale    *string
-	Currency  *string
-	Situation *domain.Situation
+	Title              *string
+	Diagnoses          *[]string
+	Palette            *string
+	Locale             *string
+	Currency           *string
+	WelcomeLetter      *string
+	VideoURL           *string
+	BeforeAfterCaseIDs *[]string
+	Situation          *domain.Situation
 }
 
 func (s *Service) UpdatePlanHeader(ctx context.Context, wsID id.ID, planID id.ID, in UpdatePlanHeaderInput) (domain.Plan, error) {
@@ -277,6 +294,15 @@ func (s *Service) UpdatePlanHeader(ctx context.Context, wsID id.ID, planID id.ID
 	if in.Diagnoses != nil {
 		current.Situation = domain.MergeSituation(*in.Diagnoses, current.Situation)
 		current.Diagnoses = current.Situation.Diagnoses()
+	}
+	if in.WelcomeLetter != nil {
+		current.WelcomeLetter = strings.TrimSpace(*in.WelcomeLetter)
+	}
+	if in.VideoURL != nil {
+		current.VideoURL = strings.TrimSpace(*in.VideoURL)
+	}
+	if in.BeforeAfterCaseIDs != nil {
+		current.BeforeAfterCaseIDs = domain.CleanStrings(*in.BeforeAfterCaseIDs)
 	}
 	if err := s.planStore.UpdatePlanHeader(ctx, current); err != nil {
 		return domain.Plan{}, err
@@ -661,6 +687,92 @@ func (s *Service) CreateClassic(ctx context.Context, wsID id.ID, input ClassicPl
 		Locale:    string(locale),
 		Diagnoses: input.Diagnoses,
 		Situation: input.Situation,
+	})
+	if err != nil {
+		return domain.Plan{}, err
+	}
+	if len(input.Visits) > 0 {
+		plan, err = s.PutVisits(ctx, wsID, plan.ID, input.Visits)
+		if err != nil {
+			return domain.Plan{}, err
+		}
+	}
+	if len(input.Items) > 0 {
+		plan, err = s.PutItems(ctx, wsID, plan.ID, input.Items)
+		if err != nil {
+			return domain.Plan{}, err
+		}
+	}
+	if len(input.Discounts) > 0 {
+		plan, err = s.PutDiscounts(ctx, wsID, plan.ID, input.Discounts)
+		if err != nil {
+			return domain.Plan{}, err
+		}
+	}
+	return plan, nil
+}
+
+type UltimatePlanInput struct {
+	Palette            string
+	Locale             string
+	Patient            ClassicPatientInput
+	Title              string
+	WelcomeLetter      string
+	VideoURL           string
+	BeforeAfterCaseIDs []string
+	Diagnoses          []string
+	Situation          domain.Situation
+	Visits             []PutVisitInput
+	Items              []PutItemInput
+	Discounts          []PutDiscountInput
+}
+
+type UltimateForm struct {
+	Product  string               `json:"product"`
+	Clinic   ClinicSettingsDTO    `json:"clinic"`
+	Sections []domain.FormSection `json:"sections"`
+}
+
+func (s *Service) UltimateForm(ctx context.Context, wsID id.ID) (UltimateForm, error) {
+	if wsID.IsZero() {
+		return UltimateForm{}, errx.New("invalid_workspace_id", "workspace id is required", errx.ErrInvalid)
+	}
+	clinic := ClinicSettingsDTO{}
+	if s.settings != nil {
+		if st, err := s.settings.GetClinicSettings(ctx, wsID); err == nil {
+			clinic = st
+		}
+	}
+	return UltimateForm{
+		Product:  string(domain.KindUltimate),
+		Clinic:   clinic,
+		Sections: domain.UltimateFormSections(),
+	}, nil
+}
+
+func (s *Service) CreateUltimate(ctx context.Context, wsID id.ID, input UltimatePlanInput) (domain.Plan, error) {
+	if wsID.IsZero() {
+		return domain.Plan{}, errx.New("invalid_workspace_id", "workspace id is required", errx.ErrInvalid)
+	}
+	patient, err := s.CreatePatient(ctx, wsID, input.Patient.Name, input.Patient.Contact)
+	if err != nil {
+		return domain.Plan{}, err
+	}
+	palette, locale, err := s.resolvePresentation(ctx, wsID, input.Palette, input.Locale, true)
+	if err != nil {
+		return domain.Plan{}, err
+	}
+	plan, err := s.CreatePlan(ctx, wsID, CreatePlanInput{
+		PatientID:          patient.ID,
+		Title:              input.Title,
+		Kind:               string(domain.KindUltimate),
+		Palette:            string(palette),
+		Locale:             string(locale),
+		WelcomeLetter:      input.WelcomeLetter,
+		VideoURL:           input.VideoURL,
+		BeforeAfterCaseIDs: input.BeforeAfterCaseIDs,
+		Diagnoses:          input.Diagnoses,
+		Situation:          input.Situation,
 	})
 	if err != nil {
 		return domain.Plan{}, err

@@ -113,8 +113,8 @@ func TestAvailableProducts(t *testing.T) {
 	if prods[0].ID != "classic" || !prods[0].Open {
 		t.Fatalf("classic must be open: %+v", prods[0])
 	}
-	if prods[1].ID != "ultimate" || prods[1].Open {
-		t.Fatalf("ultimate must be closed: %+v", prods[1])
+	if prods[1].ID != "ultimate" || !prods[1].Open {
+		t.Fatalf("ultimate must be open: %+v", prods[1])
 	}
 }
 

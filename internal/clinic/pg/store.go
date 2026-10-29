@@ -39,6 +39,8 @@ func (s *Store) GetSettings(ctx context.Context, workspaceID id.ID) (domain.Sett
 			signerName, signerTitle                  string
 			highlightsJSON, doctorJSON, labJSON      []byte
 			awardsJSON, hotelJSON                    []byte
+			teamJSON, reviewsJSON                    []byte
+			beforeAfterJSON, ctaJSON                 []byte
 		)
 
 		row := tx.QueryRow(ctx, `
@@ -46,7 +48,8 @@ func (s *Store) GetSettings(ctx context.Context, workspaceID id.ID) (domain.Sett
 			       logo_key, cover_image_key, phone, email, website, address, hours,
 			       map_url, intro, legal, about_text, about_image_key, welcome_body,
 			       signer_name, signer_title,
-			       highlights_json, doctor_json, lab_json, awards_json, hotel_json
+			       highlights_json, doctor_json, lab_json, awards_json, hotel_json,
+			       team_json, reviews_json, before_after_json, cta_json
 			FROM clinic_settings
 			WHERE workspace_id = $1
 		`, toUUID(workspaceID))
@@ -57,6 +60,7 @@ func (s *Store) GetSettings(ctx context.Context, workspaceID id.ID) (domain.Sett
 			&mapURL, &intro, &legal, &aboutText, &aboutKey, &welcomeBody,
 			&signerName, &signerTitle,
 			&highlightsJSON, &doctorJSON, &labJSON, &awardsJSON, &hotelJSON,
+			&teamJSON, &reviewsJSON, &beforeAfterJSON, &ctaJSON,
 		)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -105,6 +109,10 @@ func (s *Store) GetSettings(ctx context.Context, workspaceID id.ID) (domain.Sett
 			Lab:         decodeJSON[domain.Lab](labJSON),
 			Awards:      decodeJSON[domain.Awards](awardsJSON),
 			Hotel:       decodeJSON[domain.Hotel](hotelJSON),
+			Team:        decodeJSON[[]domain.Doctor](teamJSON),
+			Reviews:     decodeJSON[[]domain.Review](reviewsJSON),
+			BeforeAfter: decodeJSON[[]domain.BeforeAfterCase](beforeAfterJSON),
+			CTA:         decodeJSON[domain.CTAConfig](ctaJSON),
 		}
 		return nil
 	})
@@ -138,6 +146,31 @@ func (s *Store) SaveSettings(ctx context.Context, settings domain.Settings) erro
 	if err != nil {
 		return err
 	}
+	teamJSON, err := json.Marshal(settings.Team)
+	if err != nil {
+		return err
+	}
+	if settings.Team == nil {
+		teamJSON = []byte("[]")
+	}
+	reviewsJSON, err := json.Marshal(settings.Reviews)
+	if err != nil {
+		return err
+	}
+	if settings.Reviews == nil {
+		reviewsJSON = []byte("[]")
+	}
+	beforeAfterJSON, err := json.Marshal(settings.BeforeAfter)
+	if err != nil {
+		return err
+	}
+	if settings.BeforeAfter == nil {
+		beforeAfterJSON = []byte("[]")
+	}
+	ctaJSON, err := json.Marshal(settings.CTA)
+	if err != nil {
+		return err
+	}
 
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		if err := rls.Apply(ctx, tx); err != nil {
@@ -150,13 +183,15 @@ func (s *Store) SaveSettings(ctx context.Context, settings domain.Settings) erro
 				logo_key, cover_image_key, phone, email, website, address, hours,
 				map_url, intro, legal, about_text, about_image_key, welcome_body,
 				signer_name, signer_title,
-				highlights_json, doctor_json, lab_json, awards_json, hotel_json
+				highlights_json, doctor_json, lab_json, awards_json, hotel_json,
+				team_json, reviews_json, before_after_json, cta_json
 			) VALUES (
 				$1, $2, $3, $4, $5, $6,
 				$7, $8, $9, $10, $11, $12, $13,
 				$14, $15, $16, $17, $18, $19,
 				$20, $21,
-				$22, $23, $24, $25, $26
+				$22, $23, $24, $25, $26,
+				$27, $28, $29, $30
 			)
 			ON CONFLICT (workspace_id) DO UPDATE SET
 				name = EXCLUDED.name,
@@ -184,6 +219,10 @@ func (s *Store) SaveSettings(ctx context.Context, settings domain.Settings) erro
 				lab_json = EXCLUDED.lab_json,
 				awards_json = EXCLUDED.awards_json,
 				hotel_json = EXCLUDED.hotel_json,
+				team_json = EXCLUDED.team_json,
+				reviews_json = EXCLUDED.reviews_json,
+				before_after_json = EXCLUDED.before_after_json,
+				cta_json = EXCLUDED.cta_json,
 				updated_at = now()
 		`,
 			toUUID(settings.WorkspaceID),
@@ -212,6 +251,10 @@ func (s *Store) SaveSettings(ctx context.Context, settings domain.Settings) erro
 			labJSON,
 			awardsJSON,
 			hotelJSON,
+			teamJSON,
+			reviewsJSON,
+			beforeAfterJSON,
+			ctaJSON,
 		)
 		if err != nil {
 			return err

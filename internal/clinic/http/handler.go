@@ -40,61 +40,69 @@ type productsResponse struct {
 }
 
 type settingsResponse struct {
-	WorkspaceID string        `json:"workspace_id"`
-	Name        string        `json:"name"`
-	Slogan      string        `json:"slogan"`
-	Locale      string        `json:"locale"`
-	Currency    string        `json:"currency"`
-	Palette     string        `json:"palette"`
-	LogoKey     string        `json:"logo_key"`
-	CoverKey    string        `json:"cover_key"`
-	Phone       string        `json:"phone"`
-	Email       string        `json:"email"`
-	Website     string        `json:"website"`
-	Address     string        `json:"address"`
-	Hours       string        `json:"hours"`
-	MapURL      string        `json:"map_url"`
-	Intro       string        `json:"intro"`
-	Legal       string        `json:"legal"`
-	AboutText   string        `json:"about_text"`
-	AboutKey    string        `json:"about_key"`
-	WelcomeBody string        `json:"welcome_body"`
-	SignerName  string        `json:"signer_name"`
-	SignerTitle string        `json:"signer_title"`
-	Highlights  []domain.Stat `json:"highlights"`
-	Doctor      domain.Doctor `json:"doctor"`
-	Lab         domain.Lab    `json:"lab"`
-	Awards      domain.Awards `json:"awards"`
-	Hotel       domain.Hotel  `json:"hotel"`
+	WorkspaceID string                   `json:"workspace_id"`
+	Name        string                   `json:"name"`
+	Slogan      string                   `json:"slogan"`
+	Locale      string                   `json:"locale"`
+	Currency    string                   `json:"currency"`
+	Palette     string                   `json:"palette"`
+	LogoKey     string                   `json:"logo_key"`
+	CoverKey    string                   `json:"cover_key"`
+	Phone       string                   `json:"phone"`
+	Email       string                   `json:"email"`
+	Website     string                   `json:"website"`
+	Address     string                   `json:"address"`
+	Hours       string                   `json:"hours"`
+	MapURL      string                   `json:"map_url"`
+	Intro       string                   `json:"intro"`
+	Legal       string                   `json:"legal"`
+	AboutText   string                   `json:"about_text"`
+	AboutKey    string                   `json:"about_key"`
+	WelcomeBody string                   `json:"welcome_body"`
+	SignerName  string                   `json:"signer_name"`
+	SignerTitle string                   `json:"signer_title"`
+	Highlights  []domain.Stat            `json:"highlights"`
+	Doctor      domain.Doctor            `json:"doctor"`
+	Lab         domain.Lab               `json:"lab"`
+	Awards      domain.Awards            `json:"awards"`
+	Hotel       domain.Hotel             `json:"hotel"`
+	Team        []domain.Doctor          `json:"team"`
+	Reviews     []domain.Review          `json:"reviews"`
+	BeforeAfter []domain.BeforeAfterCase `json:"before_after"`
+	CTA         domain.CTAConfig         `json:"cta"`
 }
 
 type patchSettingsRequest struct {
-	WorkspaceID *string        `json:"workspace_id,omitempty"`
-	Name        *string        `json:"name"`
-	Slogan      *string        `json:"slogan"`
-	Locale      *string        `json:"locale"`
-	Currency    *string        `json:"currency"`
-	Palette     *string        `json:"palette"`
-	LogoKey     *string        `json:"logo_key"`
-	CoverKey    *string        `json:"cover_key"`
-	Phone       *string        `json:"phone"`
-	Email       *string        `json:"email"`
-	Website     *string        `json:"website"`
-	Address     *string        `json:"address"`
-	Hours       *string        `json:"hours"`
-	MapURL      *string        `json:"map_url"`
-	Intro       *string        `json:"intro"`
-	Legal       *string        `json:"legal"`
-	AboutText   *string        `json:"about_text"`
-	AboutKey    *string        `json:"about_key"`
-	WelcomeBody *string        `json:"welcome_body"`
-	SignerName  *string        `json:"signer_name"`
-	SignerTitle *string        `json:"signer_title"`
-	Highlights  *[]domain.Stat `json:"highlights"`
-	Doctor      *domain.Doctor `json:"doctor"`
-	Lab         *domain.Lab    `json:"lab"`
-	Awards      *domain.Awards `json:"awards"`
-	Hotel       *domain.Hotel  `json:"hotel"`
+	WorkspaceID *string                   `json:"workspace_id,omitempty"`
+	Name        *string                   `json:"name"`
+	Slogan      *string                   `json:"slogan"`
+	Locale      *string                   `json:"locale"`
+	Currency    *string                   `json:"currency"`
+	Palette     *string                   `json:"palette"`
+	LogoKey     *string                   `json:"logo_key"`
+	CoverKey    *string                   `json:"cover_key"`
+	Phone       *string                   `json:"phone"`
+	Email       *string                   `json:"email"`
+	Website     *string                   `json:"website"`
+	Address     *string                   `json:"address"`
+	Hours       *string                   `json:"hours"`
+	MapURL      *string                   `json:"map_url"`
+	Intro       *string                   `json:"intro"`
+	Legal       *string                   `json:"legal"`
+	AboutText   *string                   `json:"about_text"`
+	AboutKey    *string                   `json:"about_key"`
+	WelcomeBody *string                   `json:"welcome_body"`
+	SignerName  *string                   `json:"signer_name"`
+	SignerTitle *string                   `json:"signer_title"`
+	Highlights  *[]domain.Stat            `json:"highlights"`
+	Doctor      *domain.Doctor            `json:"doctor"`
+	Lab         *domain.Lab               `json:"lab"`
+	Awards      *domain.Awards            `json:"awards"`
+	Hotel       *domain.Hotel             `json:"hotel"`
+	Team        *[]domain.Doctor          `json:"team"`
+	Reviews     *[]domain.Review          `json:"reviews"`
+	BeforeAfter *[]domain.BeforeAfterCase `json:"before_after"`
+	CTA         *domain.CTAConfig         `json:"cta"`
 }
 
 func (h *Handler) getWorkspace(w http.ResponseWriter, r *http.Request) {
@@ -172,6 +180,10 @@ func (h *Handler) patchSettings(w http.ResponseWriter, r *http.Request) {
 		Lab:         req.Lab,
 		Awards:      req.Awards,
 		Hotel:       req.Hotel,
+		Team:        req.Team,
+		Reviews:     req.Reviews,
+		BeforeAfter: req.BeforeAfter,
+		CTA:         req.CTA,
 	})
 	if err != nil {
 		httpx.WriteError(w, err)
@@ -185,6 +197,18 @@ func toSettingsResponse(s domain.Settings) settingsResponse {
 	highlights := s.Highlights
 	if highlights == nil {
 		highlights = []domain.Stat{}
+	}
+	team := s.Team
+	if team == nil {
+		team = []domain.Doctor{}
+	}
+	reviews := s.Reviews
+	if reviews == nil {
+		reviews = []domain.Review{}
+	}
+	beforeAfter := s.BeforeAfter
+	if beforeAfter == nil {
+		beforeAfter = []domain.BeforeAfterCase{}
 	}
 	return settingsResponse{
 		WorkspaceID: s.WorkspaceID.String(),
@@ -213,5 +237,9 @@ func toSettingsResponse(s domain.Settings) settingsResponse {
 		Lab:         s.Lab,
 		Awards:      s.Awards,
 		Hotel:       s.Hotel,
+		Team:        team,
+		Reviews:     reviews,
+		BeforeAfter: beforeAfter,
+		CTA:         s.CTA,
 	}
 }

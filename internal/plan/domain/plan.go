@@ -13,14 +13,20 @@ import (
 type PlanKind string
 
 const (
-	KindClassic PlanKind = "classic"
+	KindClassic  PlanKind = "classic"
+	KindUltimate PlanKind = "ultimate"
+	KindBoth     PlanKind = "both"
 )
 
 type PlanStatus string
 
 const (
-	StatusDraft PlanStatus = "draft"
-	StatusReady PlanStatus = "ready"
+	StatusDraft    PlanStatus = "draft"
+	StatusReady    PlanStatus = "ready"
+	StatusSent     PlanStatus = "sent"
+	StatusViewed   PlanStatus = "viewed"
+	StatusAccepted PlanStatus = "accepted"
+	StatusExpired  PlanStatus = "expired"
 )
 
 type Patient struct {
@@ -150,23 +156,26 @@ func CalculateTotals(items []Item, discounts []Discount, curr money.Currency) (T
 }
 
 type Plan struct {
-	ID             id.ID          `json:"id"`
-	WorkspaceID    id.ID          `json:"workspace_id"`
-	PatientID      id.ID          `json:"patient_id"`
-	Title          string         `json:"title"`
-	Kind           PlanKind       `json:"kind"`
-	Status         PlanStatus     `json:"status"`
-	Currency       money.Currency `json:"currency"`
-	Palette        Palette        `json:"palette"`
-	Locale         Locale         `json:"locale"`
-	Diagnoses      []string       `json:"diagnoses"`
-	Situation      Situation      `json:"situation"`
-	TotalsSubtotal int64          `json:"totals_subtotal"`
-	TotalsDiscount int64          `json:"totals_discount"`
-	TotalsGrand    int64          `json:"totals_grand"`
-	SnapshotJSON   any            `json:"snapshot_json,omitempty"`
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
+	ID                 id.ID          `json:"id"`
+	WorkspaceID        id.ID          `json:"workspace_id"`
+	PatientID          id.ID          `json:"patient_id"`
+	Title              string         `json:"title"`
+	Kind               PlanKind       `json:"kind"`
+	Status             PlanStatus     `json:"status"`
+	Currency           money.Currency `json:"currency"`
+	Palette            Palette        `json:"palette"`
+	Locale             Locale         `json:"locale"`
+	Diagnoses          []string       `json:"diagnoses"`
+	Situation          Situation      `json:"situation"`
+	WelcomeLetter      string         `json:"welcome_letter"`
+	VideoURL           string         `json:"video_url"`
+	BeforeAfterCaseIDs []string       `json:"before_after_case_ids"`
+	TotalsSubtotal     int64          `json:"totals_subtotal"`
+	TotalsDiscount     int64          `json:"totals_discount"`
+	TotalsGrand        int64          `json:"totals_grand"`
+	SnapshotJSON       any            `json:"snapshot_json,omitempty"`
+	CreatedAt          time.Time      `json:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"`
 
 	Patient   *Patient   `json:"patient,omitempty"`
 	Visits    []Visit    `json:"visits,omitempty"`

@@ -230,6 +230,28 @@ paths:
           description: Created
         "422":
           $ref: "#/components/responses/Error"
+  /plans/ultimate/form:
+    get:
+      summary: Ultimate form. Includes welcome letter, video, 3D animations and before/after case references.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+  /plans/ultimate:
+    post:
+      summary: Submit one Ultimate plan with interactive presentation fields.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Created
+        "422":
+          $ref: "#/components/responses/Error"
   /plans:
     get:
       summary: List plans for current workspace
@@ -306,6 +328,71 @@ paths:
                 format: binary
         "404":
           $ref: "#/components/responses/Error"
+  /plans/{id}/share:
+    post:
+      summary: Create a public tokenized share link for Ultimate plan experience
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+    get:
+      summary: List all active and past share links for this plan
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+  /plans/{id}/share/{linkID}:
+    delete:
+      summary: Revoke an active share link
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Revoked
+  /plans/{id}/analytics:
+    get:
+      summary: Retrieve patient viewing analytics and interaction telemetry for this plan
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+  /public/plans/{token}:
+    get:
+      summary: Retrieve full Ultimate plan presentation data for patient mobile/web view
+      responses:
+        "200":
+          description: Ultimate Plan DTO
+        "404":
+          $ref: "#/components/responses/Error"
+  /public/plans/{token}/events:
+    post:
+      summary: Record patient interaction telemetry event (opened, section_viewed, viz_played, cta_clicked, etc.)
+      responses:
+        "200":
+          description: OK
+  /public/plans/{token}/accept:
+    post:
+      summary: Digitally accept treatment plan with patient signature
+      responses:
+        "200":
+          description: Accepted
+  /public/plans/{token}/viz:
+    get:
+      summary: Retrieve 3D procedural animation playlist for shared plan
+      responses:
+        "200":
+          description: Playlist
+  /public/plans/{token}/pdf:
+    get:
+      summary: Download classic PDF document via share token
+      responses:
+        "200":
+          description: PDF binary
+  /p/{token}:
+    get:
+      summary: Interactive mobile-first Web view of the Ultimate treatment plan
+      responses:
+        "200":
+          description: HTML Page
   /viz/recipes:
     get:
       summary: Public catalog of 3D treatment hamle recipes (no PHI)

@@ -38,6 +38,10 @@ func (h *Handler) Register(r chi.Router) {
 		r.Get("/plans/classic/form", h.classicForm)
 		r.Post("/plans/classic", h.createClassic)
 
+		// Ultimate form — includes welcome letter, video, before/after cases and 3D scenes.
+		r.Get("/plans/ultimate/form", h.ultimateForm)
+		r.Post("/plans/ultimate", h.createUltimate)
+
 		// Plans
 		r.Get("/plans", h.listPlans)
 		r.Post("/plans", h.createPlan)
@@ -215,6 +219,67 @@ func (h *Handler) createClassic(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusCreated, pl)
 }
 
+func (h *Handler) ultimateForm(w http.ResponseWriter, r *http.Request) {
+	wsID, err := h.getWorkspaceID(r)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	form, err := h.svc.UltimateForm(r.Context(), wsID)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, form)
+}
+
+type ultimatePlanRequest struct {
+	Palette            string                 `json:"palette"`
+	Locale             string                 `json:"locale"`
+	Patient            createPatientRequest   `json:"patient"`
+	Title              string                 `json:"title"`
+	WelcomeLetter      string                 `json:"welcome_letter"`
+	VideoURL           string                 `json:"video_url"`
+	BeforeAfterCaseIDs []string               `json:"before_after_case_ids"`
+	Diagnoses          []string               `json:"diagnoses"`
+	Situation          domain.Situation       `json:"situation"`
+	Visits             []app.PutVisitInput    `json:"visits"`
+	Items              []app.PutItemInput     `json:"items"`
+	Discounts          []app.PutDiscountInput `json:"discounts"`
+}
+
+func (h *Handler) createUltimate(w http.ResponseWriter, r *http.Request) {
+	wsID, err := h.getWorkspaceID(r)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	var req ultimatePlanRequest
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	pl, err := h.svc.CreateUltimate(r.Context(), wsID, app.UltimatePlanInput{
+		Palette:            req.Palette,
+		Locale:             req.Locale,
+		Patient:            app.ClassicPatientInput{Name: req.Patient.Name, Contact: req.Patient.Contact},
+		Title:              req.Title,
+		WelcomeLetter:      req.WelcomeLetter,
+		VideoURL:           req.VideoURL,
+		BeforeAfterCaseIDs: req.BeforeAfterCaseIDs,
+		Diagnoses:          req.Diagnoses,
+		Situation:          req.Situation,
+		Visits:             req.Visits,
+		Items:              req.Items,
+		Discounts:          req.Discounts,
+	})
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, pl)
+}
+
 type createPlanRequest struct {
 	PatientID string           `json:"patient_id"`
 	Title     string           `json:"title"`
@@ -277,12 +342,15 @@ func (h *Handler) getPlan(w http.ResponseWriter, r *http.Request) {
 }
 
 type patchPlanRequest struct {
-	Title     *string           `json:"title"`
-	Diagnoses *[]string         `json:"diagnoses"`
-	Palette   *string           `json:"palette"`
-	Locale    *string           `json:"locale"`
-	Currency  *string           `json:"currency"`
-	Situation *domain.Situation `json:"situation"`
+	Title              *string           `json:"title"`
+	Diagnoses          *[]string         `json:"diagnoses"`
+	Palette            *string           `json:"palette"`
+	Locale             *string           `json:"locale"`
+	Currency           *string           `json:"currency"`
+	WelcomeLetter      *string           `json:"welcome_letter"`
+	VideoURL           *string           `json:"video_url"`
+	BeforeAfterCaseIDs *[]string         `json:"before_after_case_ids"`
+	Situation          *domain.Situation `json:"situation"`
 }
 
 func (h *Handler) patchPlan(w http.ResponseWriter, r *http.Request) {
@@ -302,12 +370,15 @@ func (h *Handler) patchPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pl, err := h.svc.UpdatePlanHeader(r.Context(), wsID, planID, app.UpdatePlanHeaderInput{
-		Title:     req.Title,
-		Diagnoses: req.Diagnoses,
-		Palette:   req.Palette,
-		Locale:    req.Locale,
-		Currency:  req.Currency,
-		Situation: req.Situation,
+		Title:              req.Title,
+		Diagnoses:          req.Diagnoses,
+		Palette:            req.Palette,
+		Locale:             req.Locale,
+		Currency:           req.Currency,
+		WelcomeLetter:      req.WelcomeLetter,
+		VideoURL:           req.VideoURL,
+		BeforeAfterCaseIDs: req.BeforeAfterCaseIDs,
+		Situation:          req.Situation,
 	})
 	if err != nil {
 		httpx.WriteError(w, err)

@@ -51,9 +51,14 @@ func NewServer(opts Options) *Server {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"products": []map[string]any{
 				{"id": "classic", "open": true},
-				{"id": "ultimate", "open": false},
+				{"id": "ultimate", "open": true},
 			},
 		})
+	})
+
+	r.Get("/p/{token}", func(w http.ResponseWriter, req *http.Request) {
+		req.URL.Path = "/v1/p/" + chi.URLParam(req, "token")
+		r.ServeHTTP(w, req)
 	})
 
 	r.Route("/v1", func(v1 chi.Router) {

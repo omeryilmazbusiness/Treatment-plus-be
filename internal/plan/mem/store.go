@@ -154,6 +154,9 @@ func (s *Store) UpdatePlanHeader(ctx context.Context, p domain.Plan) error {
 	row.plan.TotalsSubtotal = p.TotalsSubtotal
 	row.plan.TotalsDiscount = p.TotalsDiscount
 	row.plan.TotalsGrand = p.TotalsGrand
+	row.plan.WelcomeLetter = p.WelcomeLetter
+	row.plan.VideoURL = p.VideoURL
+	row.plan.BeforeAfterCaseIDs = append([]string(nil), p.BeforeAfterCaseIDs...)
 	s.plans[p.ID] = row
 	return nil
 }

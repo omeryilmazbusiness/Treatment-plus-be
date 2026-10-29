@@ -96,3 +96,35 @@ func ClassicFormSections() []FormSection {
 		},
 	}
 }
+
+func UltimateFormSections() []FormSection {
+	sections := ClassicFormSections()
+	// Enrich presentation section with welcome letter and video url
+	for i := range sections {
+		if sections[i].ID == "presentation" {
+			sections[i].Fields = append(sections[i].Fields,
+				FormField{Name: "welcome_letter", Label: "Kişisel hekim mektubu", Type: "text", Required: false, Description: "Hastaya hitaben samimi karşılama mesajı"},
+				FormField{Name: "video_url", Label: "Tanıtım / karşılama videosu URL", Type: "string", Required: false, Description: "YouTube, Vimeo veya doğrudan MP4 linki"},
+			)
+		}
+	}
+	// Add Before/After cases section
+	sections = append(sections, FormSection{
+		ID:          "before_after",
+		Title:       "Öncesi / Sonrası Vaka Seçimi",
+		Order:       6,
+		Required:    false,
+		Description: "Bu hastaya özel planda gösterilecek klinik öncesi/sonrası vaka referansları.",
+		Fields: []FormField{
+			{Name: "before_after_case_ids", Label: "Seçili vaka ID'leri", Type: "string[]", Required: false, Repeatable: true},
+		},
+	})
+	return sections
+}
+
+func FormSectionsByKind(kind string) []FormSection {
+	if kind == "ultimate" || kind == "both" {
+		return UltimateFormSections()
+	}
+	return ClassicFormSections()
+}
