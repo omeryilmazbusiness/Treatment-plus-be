@@ -1,9 +1,12 @@
 package http
 
 import (
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -14,6 +17,16 @@ import (
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/id"
 	"github.com/treatment-plus/treatment-plus-be/internal/viz/app"
 	"github.com/treatment-plus/treatment-plus-be/internal/viz/player"
+)
+
+// Public GitHub Release asset. The 142MB GLB exceeds GitHub's 100MB git limit,
+// so it is not committed; collaborators download it from this URL.
+const defaultMouthURL = "https://github.com/omeryilmazbusiness/Treatment-plus-be/releases/download/mouth-glb/mouth.glb"
+
+var (
+	mouthOnce sync.Once
+	mouthPath string
+	mouthErr  error
 )
 
 type Handler struct {
@@ -81,23 +94,86 @@ func (h *Handler) cinematicsJS(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (h *Handler) mouth(w http.ResponseWriter, r *http.Request) {
-	paths := []string{
+	p, err := ensureMouthModel()
+	if err != nil || p == "" {
+		httpx.WriteError(w, errx.New("model_missing", "mouth.glb not available; download from the mouth-glb GitHub Release", errx.ErrNotFound))
+		return
+	}
+	w.Header().Set("Content-Type", "model/gltf-binary")
+	w.Header().Set("Cache-Control", "no-store")
+	http.ServeFile(w, r, p)
+}
+
+func mouthCandidates() []string {
+	home := os.Getenv("HOME")
+	return []string{
 		os.Getenv("VIZ_MODEL"),
 		filepath.Join("internal", "viz", "player", "static", "mouth.glb"),
-		filepath.Join(os.Getenv("HOME"), "Desktop", "mouth.glb"),
+		filepath.Join(home, "Desktop", "mouth.glb"),
+		filepath.Join(home, "Desktop", "General", "mouth.glb"),
 	}
-	for _, p := range paths {
+}
+
+func findLocalMouth() string {
+	for _, p := range mouthCandidates() {
 		if p == "" {
 			continue
 		}
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
-			w.Header().Set("Content-Type", "model/gltf-binary")
-			w.Header().Set("Cache-Control", "no-store")
-			http.ServeFile(w, r, p)
-			return
+			return p
 		}
 	}
-	httpx.WriteError(w, errx.New("model_missing", "mouth.glb not exported from the blend yet", errx.ErrNotFound))
+	return ""
+}
+
+func ensureMouthModel() (string, error) {
+	if p := findLocalMouth(); p != "" {
+		return p, nil
+	}
+	mouthOnce.Do(func() {
+		url := os.Getenv("VIZ_MODEL_URL")
+		if url == "" {
+			url = defaultMouthURL
+		}
+		dst := filepath.Join("internal", "viz", "player", "static", "mouth.glb")
+		mouthPath, mouthErr = downloadMouth(url, dst)
+	})
+	return mouthPath, mouthErr
+}
+
+func downloadMouth(url, dst string) (string, error) {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return "", err
+	}
+	client := &http.Client{Timeout: 15 * time.Minute}
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", errx.New("model_missing", "mouth.glb download failed", errx.ErrNotFound)
+	}
+	part := dst + ".part"
+	f, err := os.Create(part)
+	if err != nil {
+		return "", err
+	}
+	_, copyErr := io.Copy(f, resp.Body)
+	closeErr := f.Close()
+	if copyErr != nil {
+		_ = os.Remove(part)
+		return "", copyErr
+	}
+	if closeErr != nil {
+		_ = os.Remove(part)
+		return "", closeErr
+	}
+	if err := os.Rename(part, dst); err != nil {
+		_ = os.Remove(part)
+		return "", err
+	}
+	return dst, nil
 }
 
 func (h *Handler) playlist(w http.ResponseWriter, r *http.Request) {
