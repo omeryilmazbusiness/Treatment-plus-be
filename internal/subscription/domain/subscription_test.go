@@ -95,3 +95,4 @@ func TestClinicSubscription_QuotaAndState(t *testing.T) {
 		t.Error("ultimate subscription should allow ultimate plan")
 	}
 }
+

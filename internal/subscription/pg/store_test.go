@@ -158,3 +158,4 @@ func TestSubscriptionPG_LifecycleAndTenantIsolation(t *testing.T) {
 		t.Fatal("expected at least 1 demo request")
 	}
 }
+

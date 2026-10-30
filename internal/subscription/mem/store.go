@@ -150,3 +150,4 @@ func (s *Store) ListDemoRequests(ctx context.Context) ([]domain.DemoRequest, err
 	copy(out, s.demoRequests)
 	return out, nil
 }
+

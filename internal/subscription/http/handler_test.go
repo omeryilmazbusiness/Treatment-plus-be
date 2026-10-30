@@ -144,3 +144,4 @@ func TestSubscriptionHTTP_EndToEnd(t *testing.T) {
 		t.Fatal("expected CancelAtPeriodEnd to be true")
 	}
 }
+

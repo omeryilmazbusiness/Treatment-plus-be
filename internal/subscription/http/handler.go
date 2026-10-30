@@ -168,3 +168,4 @@ func (h *Handler) getClinicID(r *http.Request) (id.ID, error) {
 	}
 	return parsed, nil
 }
+

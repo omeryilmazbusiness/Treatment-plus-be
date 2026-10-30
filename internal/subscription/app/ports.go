@@ -16,3 +16,4 @@ type SubscriptionStore interface {
 	CreateDemoRequest(ctx context.Context, req domain.DemoRequest) error
 	ListDemoRequests(ctx context.Context) ([]domain.DemoRequest, error)
 }
+
