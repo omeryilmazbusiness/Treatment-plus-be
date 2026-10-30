@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
+	"time"
 
 	"github.com/treatment-plus/treatment-plus-be/internal/plan/domain"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/ctxkey"
@@ -157,6 +158,7 @@ func (s *Store) UpdatePlanHeader(ctx context.Context, p domain.Plan) error {
 	row.plan.WelcomeLetter = p.WelcomeLetter
 	row.plan.VideoURL = p.VideoURL
 	row.plan.BeforeAfterCaseIDs = append([]string(nil), p.BeforeAfterCaseIDs...)
+	row.plan.UpdatedAt = time.Now().UTC()
 	s.plans[p.ID] = row
 	return nil
 }
@@ -168,10 +170,11 @@ func (s *Store) ReplaceVisits(ctx context.Context, wsID id.ID, planID id.ID, vis
 		return err
 	}
 	row, ok := s.plans[planID]
-	if !ok || row.plan.WorkspaceID != wsID {
+	if !ok || row.plan.WorkspaceID != wsID || row.plan.Status != domain.StatusDraft {
 		return errx.ErrNotFound
 	}
 	row.visits = append([]domain.Visit(nil), visits...)
+	row.plan.UpdatedAt = time.Now().UTC()
 	s.plans[planID] = row
 	return nil
 }
@@ -190,6 +193,7 @@ func (s *Store) ReplaceItems(ctx context.Context, wsID id.ID, planID id.ID, item
 	row.plan.TotalsSubtotal = totals.Subtotal
 	row.plan.TotalsDiscount = totals.Discount
 	row.plan.TotalsGrand = totals.Grand
+	row.plan.UpdatedAt = time.Now().UTC()
 	s.plans[planID] = row
 	return nil
 }
@@ -208,6 +212,7 @@ func (s *Store) ReplaceDiscounts(ctx context.Context, wsID id.ID, planID id.ID, 
 	row.plan.TotalsSubtotal = totals.Subtotal
 	row.plan.TotalsDiscount = totals.Discount
 	row.plan.TotalsGrand = totals.Grand
+	row.plan.UpdatedAt = time.Now().UTC()
 	s.plans[planID] = row
 	return nil
 }
@@ -219,11 +224,15 @@ func (s *Store) SetReady(ctx context.Context, wsID id.ID, planID id.ID, snapshot
 		return err
 	}
 	row, ok := s.plans[planID]
-	if !ok || row.plan.WorkspaceID != wsID || row.plan.Status != domain.StatusDraft {
-		return errx.New("cannot_set_ready", "plan not found or already ready", errx.ErrNotFound)
+	if !ok || row.plan.WorkspaceID != wsID {
+		return errx.New("cannot_set_ready", "plan not found", errx.ErrNotFound)
+	}
+	if row.plan.Status != domain.StatusDraft {
+		return nil // already ready or past draft (idempotent)
 	}
 	row.plan.Status = domain.StatusReady
 	row.snapshot = append([]byte(nil), snapshotJSON...)
+	row.plan.UpdatedAt = time.Now().UTC()
 	s.plans[planID] = row
 	return nil
 }

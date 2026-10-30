@@ -51,7 +51,7 @@ func (a planViewAdapter) GetView(ctx context.Context, clinicID, planID id.ID) (o
 	if err != nil {
 		return outputdomain.PlanView{}, err
 	}
-	if p.Status != plandomain.StatusReady || p.SnapshotJSON == nil {
+	if !p.IsReadyOrPresented() || p.SnapshotJSON == nil {
 		return outputdomain.PlanView{}, errx.New("plan_not_ready", "plan must be ready before PDF generate", errx.ErrInvalid)
 	}
 	if raw, ok := p.SnapshotJSON.(json.RawMessage); ok {
@@ -93,10 +93,10 @@ func TestPlanPDF_GenerateDownloadAndDraftRejected(t *testing.T) {
 	classic := map[string]any{
 		"palette": "navy",
 		"locale":  "tr",
-		"patient": map[string]any{"name": "Fatma Hanım"},
-		"title":   "Fatma Hanım Plan",
+		"patient": map[string]any{"name": "Fatma HanÄ±m"},
+		"title":   "Fatma HanÄ±m Plan",
 		"visits":  []map[string]any{{"title": "1. Seans"}},
-		"items":   []map[string]any{{"treatment_name": "İmplant", "quantity": 1, "unit_price": 120000, "teeth": []string{"16"}}},
+		"items":   []map[string]any{{"treatment_name": "Ä°mplant", "quantity": 1, "unit_price": 120000, "teeth": []string{"16"}}},
 	}
 	raw, _ := json.Marshal(classic)
 	create := httptest.NewRecorder()

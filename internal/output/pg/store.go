@@ -39,7 +39,7 @@ func (s *Store) GetView(ctx context.Context, clinicID, planID id.ID) (domain.Pla
 			}
 			return err
 		}
-		if status != "ready" || len(payload) == 0 {
+		if status == "draft" || len(payload) == 0 {
 			return errx.New("plan_not_ready", "plan must be ready before PDF generate", errx.ErrInvalid)
 		}
 		view = domain.PlanView{PlanID: planID, ClinicID: clinicID, Payload: payload}

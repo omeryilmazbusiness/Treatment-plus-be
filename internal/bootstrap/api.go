@@ -29,7 +29,6 @@ import (
 	outputpdf "github.com/treatment-plus/treatment-plus-be/internal/output/pdf"
 	outputpg "github.com/treatment-plus/treatment-plus-be/internal/output/pg"
 	planapp "github.com/treatment-plus/treatment-plus-be/internal/plan/app"
-	plandomain "github.com/treatment-plus/treatment-plus-be/internal/plan/domain"
 	planhttp "github.com/treatment-plus/treatment-plus-be/internal/plan/http"
 	planpg "github.com/treatment-plus/treatment-plus-be/internal/plan/pg"
 	"github.com/treatment-plus/treatment-plus-be/internal/platform/authn"
@@ -227,7 +226,7 @@ func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, err
 		&catalogAdapter{svc: catalogSvc},
 		&clinicSettingsAdapter{svc: clinicSvc},
 		encrypter,
-	)
+	).WithLogger(log)
 
 	mediaStore := mediapg.New(pool)
 	mediaSvc := mediaapp.NewService(mediaStore)
@@ -277,7 +276,7 @@ func (a *planVizAdapter) GetReadyItems(ctx context.Context, workspaceID, planID 
 	if err != nil {
 		return "", "", nil, err
 	}
-	if p.Status != plandomain.StatusReady {
+	if !p.IsReadyOrPresented() {
 		return "", "", nil, errx.New("plan_not_ready", "plan must be ready before 3D playlist", errx.ErrInvalid)
 	}
 	items := make([]vizapp.ItemRef, 0, len(p.Items))

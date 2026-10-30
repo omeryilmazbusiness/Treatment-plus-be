@@ -29,6 +29,11 @@ const (
 	StatusExpired  PlanStatus = "expired"
 )
 
+var (
+	// ErrPlanLocked is returned when attempting to modify a plan that is no longer in draft status.
+	ErrPlanLocked = errx.New("plan_locked", "cannot modify ready or finalized plan", errx.ErrInvalid)
+)
+
 type Patient struct {
 	ID          id.ID     `json:"id"`
 	WorkspaceID id.ID     `json:"workspace_id"`
@@ -181,6 +186,35 @@ type Plan struct {
 	Visits    []Visit    `json:"visits,omitempty"`
 	Items     []Item     `json:"items,omitempty"`
 	Discounts []Discount `json:"discounts,omitempty"`
+}
+
+// CanModify returns true if the plan is in draft status and can be edited.
+func (p Plan) CanModify() bool {
+	return p.Status == StatusDraft
+}
+
+// IsReadyOrPresented returns true if the plan has been locked and ready/presented to the patient.
+func (p Plan) IsReadyOrPresented() bool {
+	switch p.Status {
+	case StatusReady, StatusSent, StatusViewed, StatusAccepted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Validate verifies domain invariants for a plan.
+func (p Plan) Validate() error {
+	if p.WorkspaceID.IsZero() {
+		return errx.New("invalid_workspace_id", "workspace id is required", errx.ErrInvalid)
+	}
+	if p.PatientID.IsZero() {
+		return errx.New("invalid_patient_id", "patient id is required", errx.ErrInvalid)
+	}
+	if strings.TrimSpace(p.Title) == "" {
+		return errx.New("invalid_title", "title cannot be empty", errx.ErrInvalid)
+	}
+	return nil
 }
 
 type ClinicStatSnapshot struct {

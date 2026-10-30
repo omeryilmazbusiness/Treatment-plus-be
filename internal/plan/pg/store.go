@@ -496,8 +496,22 @@ func (s *Store) ReplaceVisits(ctx context.Context, wsID id.ID, planID id.ID, vis
 		if err := rls.Apply(ctx, tx); err != nil {
 			return err
 		}
+
+		// Verify plan exists in workspace and is draft, updating timestamp
+		tag, err := tx.Exec(ctx, `
+			UPDATE plans
+			SET updated_at = now()
+			WHERE workspace_id = $1 AND id = $2 AND status = 'draft'
+		`, toUUID(wsID), toUUID(planID))
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return errx.ErrNotFound
+		}
+
 		// Delete existing
-		_, err := tx.Exec(ctx, `
+		_, err = tx.Exec(ctx, `
 			DELETE FROM plan_visits WHERE workspace_id = $1 AND plan_id = $2
 		`, toUUID(wsID), toUUID(planID))
 		if err != nil {
@@ -526,8 +540,22 @@ func (s *Store) ReplaceItems(ctx context.Context, wsID id.ID, planID id.ID, item
 		if err := rls.Apply(ctx, tx); err != nil {
 			return err
 		}
+
+		// Verify plan exists and is draft, updating totals
+		tag, err := tx.Exec(ctx, `
+			UPDATE plans
+			SET totals_subtotal = $3, totals_discount = $4, totals_grand = $5, updated_at = now()
+			WHERE workspace_id = $1 AND id = $2 AND status = 'draft'
+		`, toUUID(wsID), toUUID(planID), totals.Subtotal, totals.Discount, totals.Grand)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return errx.ErrNotFound
+		}
+
 		// Delete existing
-		_, err := tx.Exec(ctx, `
+		_, err = tx.Exec(ctx, `
 			DELETE FROM plan_items WHERE workspace_id = $1 AND plan_id = $2
 		`, toUUID(wsID), toUUID(planID))
 		if err != nil {
@@ -562,13 +590,7 @@ func (s *Store) ReplaceItems(ctx context.Context, wsID id.ID, planID id.ID, item
 			}
 		}
 
-		// Update totals on plan
-		_, err = tx.Exec(ctx, `
-			UPDATE plans
-			SET totals_subtotal = $3, totals_discount = $4, totals_grand = $5, updated_at = now()
-			WHERE workspace_id = $1 AND id = $2 AND status = 'draft'
-		`, toUUID(wsID), toUUID(planID), totals.Subtotal, totals.Discount, totals.Grand)
-		return err
+		return nil
 	})
 }
 
@@ -577,8 +599,22 @@ func (s *Store) ReplaceDiscounts(ctx context.Context, wsID id.ID, planID id.ID, 
 		if err := rls.Apply(ctx, tx); err != nil {
 			return err
 		}
+
+		// Verify plan exists and is draft, updating totals
+		tag, err := tx.Exec(ctx, `
+			UPDATE plans
+			SET totals_subtotal = $3, totals_discount = $4, totals_grand = $5, updated_at = now()
+			WHERE workspace_id = $1 AND id = $2 AND status = 'draft'
+		`, toUUID(wsID), toUUID(planID), totals.Subtotal, totals.Discount, totals.Grand)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return errx.ErrNotFound
+		}
+
 		// Delete existing
-		_, err := tx.Exec(ctx, `
+		_, err = tx.Exec(ctx, `
 			DELETE FROM plan_discounts WHERE workspace_id = $1 AND plan_id = $2
 		`, toUUID(wsID), toUUID(planID))
 		if err != nil {
@@ -595,13 +631,7 @@ func (s *Store) ReplaceDiscounts(ctx context.Context, wsID id.ID, planID id.ID, 
 			}
 		}
 
-		// Update totals on plan
-		_, err = tx.Exec(ctx, `
-			UPDATE plans
-			SET totals_subtotal = $3, totals_discount = $4, totals_grand = $5, updated_at = now()
-			WHERE workspace_id = $1 AND id = $2 AND status = 'draft'
-		`, toUUID(wsID), toUUID(planID), totals.Subtotal, totals.Discount, totals.Grand)
-		return err
+		return nil
 	})
 }
 
@@ -619,7 +649,18 @@ func (s *Store) SetReady(ctx context.Context, wsID id.ID, planID id.ID, snapshot
 			return err
 		}
 		if tag.RowsAffected() == 0 {
-			return errx.New("cannot_set_ready", "plan not found or already ready", errx.ErrNotFound)
+			var currentStatus string
+			err := tx.QueryRow(ctx, `
+				SELECT status FROM plans WHERE workspace_id = $1 AND id = $2
+			`, toUUID(wsID), toUUID(planID)).Scan(&currentStatus)
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return errx.New("cannot_set_ready", "plan not found", errx.ErrNotFound)
+				}
+				return err
+			}
+			// Plan exists and is already ready or in another post-draft state -> idempotent success
+			return nil
 		}
 		return nil
 	})

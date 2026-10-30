@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -18,6 +20,7 @@ type Service struct {
 	catalog      CatalogReader
 	settings     SettingsReader
 	encrypter    Encrypter
+	log          *slog.Logger
 }
 
 func NewService(
@@ -33,7 +36,23 @@ func NewService(
 		catalog:      catalog,
 		settings:     settings,
 		encrypter:    encrypter,
+		log:          slog.Default(),
 	}
+}
+
+// WithLogger configures structured logger on the service.
+func (s *Service) WithLogger(log *slog.Logger) *Service {
+	if log != nil {
+		s.log = log
+	}
+	return s
+}
+
+func (s *Service) logger() *slog.Logger {
+	if s.log != nil {
+		return s.log
+	}
+	return slog.Default()
 }
 
 // Patients
@@ -50,6 +69,8 @@ func (s *Service) ListPatients(ctx context.Context, wsID id.ID) ([]domain.Patien
 			dec, err := s.encrypter.Decrypt(patients[i].Contact)
 			if err == nil {
 				patients[i].Contact = dec
+			} else {
+				s.logger().WarnContext(ctx, "failed to decrypt patient contact", "patient_id", patients[i].ID, "error", err)
 			}
 		}
 	}
@@ -68,6 +89,8 @@ func (s *Service) GetPatient(ctx context.Context, wsID id.ID, patID id.ID) (doma
 		dec, err := s.encrypter.Decrypt(p.Contact)
 		if err == nil {
 			p.Contact = dec
+		} else {
+			s.logger().WarnContext(ctx, "failed to decrypt patient contact", "patient_id", p.ID, "error", err)
 		}
 	}
 	return p, nil
@@ -90,6 +113,7 @@ func (s *Service) CreatePatient(ctx context.Context, wsID id.ID, name, contact s
 	if s.encrypter != nil && p.Contact != "" {
 		enc, err := s.encrypter.Encrypt(p.Contact)
 		if err != nil {
+			s.logger().ErrorContext(ctx, "failed to encrypt patient contact", "patient_id", p.ID, "error", err)
 			return domain.Patient{}, err
 		}
 		encrypted = enc
@@ -97,6 +121,7 @@ func (s *Service) CreatePatient(ctx context.Context, wsID id.ID, name, contact s
 	if err := s.patientStore.SavePatient(ctx, p, encrypted); err != nil {
 		return domain.Patient{}, err
 	}
+	s.logger().InfoContext(ctx, "patient created", "workspace_id", wsID, "patient_id", p.ID)
 	return p, nil
 }
 
@@ -118,6 +143,7 @@ func (s *Service) UpdatePatient(ctx context.Context, wsID id.ID, patID id.ID, na
 	if s.encrypter != nil && current.Contact != "" {
 		enc, err := s.encrypter.Encrypt(current.Contact)
 		if err != nil {
+			s.logger().ErrorContext(ctx, "failed to encrypt patient contact", "patient_id", current.ID, "error", err)
 			return domain.Patient{}, err
 		}
 		encrypted = enc
@@ -125,6 +151,7 @@ func (s *Service) UpdatePatient(ctx context.Context, wsID id.ID, patID id.ID, na
 	if err := s.patientStore.SavePatient(ctx, current, encrypted); err != nil {
 		return domain.Patient{}, err
 	}
+	s.logger().InfoContext(ctx, "patient updated", "workspace_id", wsID, "patient_id", current.ID)
 	return current, nil
 }
 
@@ -142,6 +169,8 @@ func (s *Service) ListPlans(ctx context.Context, wsID id.ID) ([]domain.Plan, err
 			dec, err := s.encrypter.Decrypt(plans[i].Patient.Contact)
 			if err == nil {
 				plans[i].Patient.Contact = dec
+			} else {
+				s.logger().WarnContext(ctx, "failed to decrypt patient contact in plan", "plan_id", plans[i].ID, "error", err)
 			}
 		}
 	}
@@ -160,6 +189,8 @@ func (s *Service) GetPlan(ctx context.Context, wsID id.ID, planID id.ID) (domain
 		pat, err := s.GetPatient(ctx, wsID, p.PatientID)
 		if err == nil {
 			p.Patient = &pat
+		} else if !errors.Is(err, errx.ErrNotFound) {
+			s.logger().WarnContext(ctx, "failed to load patient for plan", "workspace_id", wsID, "patient_id", p.PatientID, "error", err)
 		}
 	}
 	return p, nil
@@ -228,10 +259,15 @@ func (s *Service) CreatePlan(ctx context.Context, wsID id.ID, input CreatePlanIn
 		TotalsGrand:        0,
 	}
 
+	if err := p.Validate(); err != nil {
+		return domain.Plan{}, err
+	}
+
 	if err := s.planStore.CreatePlan(ctx, p); err != nil {
 		return domain.Plan{}, err
 	}
 
+	s.logger().InfoContext(ctx, "plan created", "workspace_id", wsID, "plan_id", p.ID, "kind", p.Kind)
 	return s.GetPlan(ctx, wsID, p.ID)
 }
 
@@ -252,8 +288,8 @@ func (s *Service) UpdatePlanHeader(ctx context.Context, wsID id.ID, planID id.ID
 	if err != nil {
 		return domain.Plan{}, err
 	}
-	if current.Status == domain.StatusReady {
-		return domain.Plan{}, errx.New("plan_locked", "cannot modify ready plan", errx.ErrInvalid)
+	if !current.CanModify() {
+		return domain.Plan{}, domain.ErrPlanLocked
 	}
 	if in.Title != nil {
 		current.Title = strings.TrimSpace(*in.Title)
@@ -280,11 +316,13 @@ func (s *Service) UpdatePlanHeader(ctx context.Context, wsID id.ID, planID id.ID
 		current.Currency = curr
 		if len(current.Items) > 0 || len(current.Discounts) > 0 {
 			totals, err := domain.CalculateTotals(current.Items, current.Discounts, current.Currency)
-			if err == nil {
-				current.TotalsSubtotal = totals.Subtotal
-				current.TotalsDiscount = totals.Discount
-				current.TotalsGrand = totals.Grand
+			if err != nil {
+				s.logger().ErrorContext(ctx, "failed to recalculate totals after currency update", "plan_id", planID, "error", err)
+				return domain.Plan{}, err
 			}
+			current.TotalsSubtotal = totals.Subtotal
+			current.TotalsDiscount = totals.Discount
+			current.TotalsGrand = totals.Grand
 		}
 	}
 	if in.Situation != nil {
@@ -307,6 +345,7 @@ func (s *Service) UpdatePlanHeader(ctx context.Context, wsID id.ID, planID id.ID
 	if err := s.planStore.UpdatePlanHeader(ctx, current); err != nil {
 		return domain.Plan{}, err
 	}
+	s.logger().InfoContext(ctx, "plan header updated", "workspace_id", wsID, "plan_id", planID)
 	return s.GetPlan(ctx, wsID, planID)
 }
 
@@ -324,8 +363,8 @@ func (s *Service) PutVisits(ctx context.Context, wsID id.ID, planID id.ID, visit
 	if err != nil {
 		return domain.Plan{}, err
 	}
-	if current.Status == domain.StatusReady {
-		return domain.Plan{}, errx.New("plan_locked", "cannot modify ready plan", errx.ErrInvalid)
+	if !current.CanModify() {
+		return domain.Plan{}, domain.ErrPlanLocked
 	}
 
 	var domainVisits []domain.Visit
@@ -359,6 +398,7 @@ func (s *Service) PutVisits(ctx context.Context, wsID id.ID, planID id.ID, visit
 	if err := s.planStore.ReplaceVisits(ctx, wsID, planID, domainVisits); err != nil {
 		return domain.Plan{}, err
 	}
+	s.logger().InfoContext(ctx, "plan visits replaced", "workspace_id", wsID, "plan_id", planID, "count", len(domainVisits))
 	return s.GetPlan(ctx, wsID, planID)
 }
 
@@ -382,8 +422,8 @@ func (s *Service) PutItems(ctx context.Context, wsID id.ID, planID id.ID, items 
 	if err != nil {
 		return domain.Plan{}, err
 	}
-	if current.Status == domain.StatusReady {
-		return domain.Plan{}, errx.New("plan_locked", "cannot modify ready plan", errx.ErrInvalid)
+	if !current.CanModify() {
+		return domain.Plan{}, domain.ErrPlanLocked
 	}
 
 	var domainItems []domain.Item
@@ -425,6 +465,8 @@ func (s *Service) PutItems(ctx context.Context, wsID id.ID, planID id.ID, items 
 						if it.UnitPrice == nil && cPrice > 0 {
 							unitPrice = cPrice
 						}
+					} else {
+						s.logger().WarnContext(ctx, "catalog lookup failed for treatment", "treatment_id", parsed, "error", cErr)
 					}
 				}
 			}
@@ -466,12 +508,14 @@ func (s *Service) PutItems(ctx context.Context, wsID id.ID, planID id.ID, items 
 
 	totals, err := domain.CalculateTotals(domainItems, current.Discounts, current.Currency)
 	if err != nil {
+		s.logger().ErrorContext(ctx, "failed to calculate totals for items", "plan_id", planID, "error", err)
 		return domain.Plan{}, err
 	}
 
 	if err := s.planStore.ReplaceItems(ctx, wsID, planID, domainItems, totals); err != nil {
 		return domain.Plan{}, err
 	}
+	s.logger().InfoContext(ctx, "plan items replaced", "workspace_id", wsID, "plan_id", planID, "count", len(domainItems))
 	return s.GetPlan(ctx, wsID, planID)
 }
 
@@ -487,8 +531,8 @@ func (s *Service) PutDiscounts(ctx context.Context, wsID id.ID, planID id.ID, di
 	if err != nil {
 		return domain.Plan{}, err
 	}
-	if current.Status == domain.StatusReady {
-		return domain.Plan{}, errx.New("plan_locked", "cannot modify ready plan", errx.ErrInvalid)
+	if !current.CanModify() {
+		return domain.Plan{}, domain.ErrPlanLocked
 	}
 
 	var domainDiscounts []domain.Discount
@@ -518,12 +562,14 @@ func (s *Service) PutDiscounts(ctx context.Context, wsID id.ID, planID id.ID, di
 
 	totals, err := domain.CalculateTotals(current.Items, domainDiscounts, current.Currency)
 	if err != nil {
+		s.logger().ErrorContext(ctx, "failed to calculate totals for discounts", "plan_id", planID, "error", err)
 		return domain.Plan{}, err
 	}
 
 	if err := s.planStore.ReplaceDiscounts(ctx, wsID, planID, domainDiscounts, totals); err != nil {
 		return domain.Plan{}, err
 	}
+	s.logger().InfoContext(ctx, "plan discounts replaced", "workspace_id", wsID, "plan_id", planID, "count", len(domainDiscounts))
 	return s.GetPlan(ctx, wsID, planID)
 }
 
@@ -532,8 +578,8 @@ func (s *Service) SetReady(ctx context.Context, wsID id.ID, planID id.ID) (domai
 	if err != nil {
 		return domain.Plan{}, err
 	}
-	if current.Status == domain.StatusReady {
-		return current, nil // Already locked
+	if !current.CanModify() {
+		return current, nil // Already locked or past draft (ready, sent, viewed, accepted) - idempotent success
 	}
 
 	var clinicSnap domain.ClinicSnapshot
@@ -551,6 +597,8 @@ func (s *Service) SetReady(ctx context.Context, wsID id.ID, planID id.ID) (domai
 					current.Locale = loc
 				}
 			}
+		} else {
+			s.logger().WarnContext(ctx, "failed to fetch clinic settings for snapshot, fallback to defaults", "workspace_id", wsID, "error", err)
 		}
 	}
 	clinicSnap.Palette = string(current.Palette)
@@ -618,6 +666,7 @@ func (s *Service) SetReady(ctx context.Context, wsID id.ID, planID id.ID) (domai
 
 	snapBytes, err := json.Marshal(snapshot)
 	if err != nil {
+		s.logger().ErrorContext(ctx, "failed to marshal plan snapshot", "plan_id", planID, "error", err)
 		return domain.Plan{}, err
 	}
 
@@ -625,6 +674,7 @@ func (s *Service) SetReady(ctx context.Context, wsID id.ID, planID id.ID) (domai
 		return domain.Plan{}, err
 	}
 
+	s.logger().InfoContext(ctx, "plan marked ready and locked", "workspace_id", wsID, "plan_id", planID)
 	return s.GetPlan(ctx, wsID, planID)
 }
 
@@ -709,6 +759,7 @@ func (s *Service) CreateClassic(ctx context.Context, wsID id.ID, input ClassicPl
 			return domain.Plan{}, err
 		}
 	}
+	s.logger().InfoContext(ctx, "classic plan created successfully", "workspace_id", wsID, "plan_id", plan.ID)
 	return plan, nil
 }
 
@@ -795,6 +846,7 @@ func (s *Service) CreateUltimate(ctx context.Context, wsID id.ID, input Ultimate
 			return domain.Plan{}, err
 		}
 	}
+	s.logger().InfoContext(ctx, "ultimate plan created successfully", "workspace_id", wsID, "plan_id", plan.ID)
 	return plan, nil
 }
 

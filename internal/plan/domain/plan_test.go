@@ -121,3 +121,83 @@ func TestPatient_Validate(t *testing.T) {
 		t.Fatalf("expected error for empty name")
 	}
 }
+
+func TestPlan_CanModifyAndIsReadyOrPresented(t *testing.T) {
+	draft := domain.Plan{Status: domain.StatusDraft}
+	if !draft.CanModify() {
+		t.Errorf("draft plan should be modifiable")
+	}
+	if draft.IsReadyOrPresented() {
+		t.Errorf("draft plan should not be ready or presented")
+	}
+
+	ready := domain.Plan{Status: domain.StatusReady}
+	if ready.CanModify() {
+		t.Errorf("ready plan should not be modifiable")
+	}
+	if !ready.IsReadyOrPresented() {
+		t.Errorf("ready plan should be considered ready or presented")
+	}
+
+	sent := domain.Plan{Status: domain.StatusSent}
+	if sent.CanModify() || !sent.IsReadyOrPresented() {
+		t.Errorf("sent plan should be locked and ready")
+	}
+
+	viewed := domain.Plan{Status: domain.StatusViewed}
+	if viewed.CanModify() || !viewed.IsReadyOrPresented() {
+		t.Errorf("viewed plan should be locked and ready")
+	}
+
+	accepted := domain.Plan{Status: domain.StatusAccepted}
+	if accepted.CanModify() || !accepted.IsReadyOrPresented() {
+		t.Errorf("accepted plan should be locked and ready")
+	}
+
+	expired := domain.Plan{Status: domain.StatusExpired}
+	if expired.CanModify() {
+		t.Errorf("expired plan should not be modifiable")
+	}
+	if expired.IsReadyOrPresented() {
+		t.Errorf("expired plan should not be considered active ready")
+	}
+}
+
+func TestPlan_Validate(t *testing.T) {
+	wsID := id.New()
+	patID := id.New()
+
+	valid := domain.Plan{
+		WorkspaceID: wsID,
+		PatientID:   patID,
+		Title:       "Valid Title",
+	}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("expected valid plan, got %v", err)
+	}
+
+	noWs := domain.Plan{
+		PatientID: patID,
+		Title:     "Title",
+	}
+	if err := noWs.Validate(); err == nil {
+		t.Errorf("expected error for zero workspace ID")
+	}
+
+	noPat := domain.Plan{
+		WorkspaceID: wsID,
+		Title:       "Title",
+	}
+	if err := noPat.Validate(); err == nil {
+		t.Errorf("expected error for zero patient ID")
+	}
+
+	noTitle := domain.Plan{
+		WorkspaceID: wsID,
+		PatientID:   patID,
+		Title:       "   ",
+	}
+	if err := noTitle.Validate(); err == nil {
+		t.Errorf("expected error for empty title")
+	}
+}
