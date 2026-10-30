@@ -43,6 +43,9 @@ import (
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/crypto"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/errx"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/id"
+	subapp "github.com/treatment-plus/treatment-plus-be/internal/subscription/app"
+	subhttp "github.com/treatment-plus/treatment-plus-be/internal/subscription/http"
+	subpg "github.com/treatment-plus/treatment-plus-be/internal/subscription/pg"
 	vizapp "github.com/treatment-plus/treatment-plus-be/internal/viz/app"
 	vizhttp "github.com/treatment-plus/treatment-plus-be/internal/viz/http"
 )
@@ -244,6 +247,11 @@ func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, err
 		cfg.App.URL,
 	)
 
+	subStore := subpg.New(pool)
+	subSvc := subapp.NewService(subStore, clk)
+	clinicSvc.WithSubscription(&clinicSubAdapter{svc: subSvc})
+	planSvc.WithSubscription(&planSubAdapter{svc: subSvc})
+
 	srv := httpx.NewServer(httpx.Options{
 		Config: cfg,
 		Log:    log,
@@ -260,6 +268,7 @@ func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, err
 			outputhttp.NewHandler(outputSvc, tokens),
 			vizhttp.NewHandler(vizSvc, tokens),
 			sharehttp.NewHandler(shareSvc, tokens),
+			subhttp.NewHandler(subSvc, tokens),
 			aihttp.NewHandler(),
 		},
 	})
@@ -551,6 +560,30 @@ func (a *sharePDFAdapter) GetPlanPDF(ctx context.Context, clinicID, planID id.ID
 		return nil, err
 	}
 	return doc.Bytes, nil
+}
+
+type clinicSubAdapter struct {
+	svc *subapp.Service
+}
+
+func (a *clinicSubAdapter) GetActiveTier(ctx context.Context, wsID id.ID) (string, bool, error) {
+	cur, err := a.svc.GetCurrentSubscription(ctx, wsID)
+	if err != nil {
+		return "", false, err
+	}
+	return cur.Tier, cur.AllowsUltimate, nil
+}
+
+type planSubAdapter struct {
+	svc *subapp.Service
+}
+
+func (a *planSubAdapter) CanCreatePlan(ctx context.Context, wsID id.ID, kind string) error {
+	return a.svc.CanCreatePlan(ctx, wsID, kind)
+}
+
+func (a *planSubAdapter) RecordPlanUsage(ctx context.Context, wsID id.ID) error {
+	return a.svc.RecordPlanUsage(ctx, wsID)
 }
 
 func (a *API) Close() {

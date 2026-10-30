@@ -24,7 +24,11 @@ func NewHandler(svc *app.Service, auth *authn.JWT) *Handler {
 }
 
 func (h *Handler) Register(r chi.Router) {
-	r.Get("/workspace", h.getWorkspace)
+	if h.auth != nil {
+		r.With(h.auth.Optional).Get("/workspace", h.getWorkspace)
+	} else {
+		r.Get("/workspace", h.getWorkspace)
+	}
 
 	r.Group(func(r chi.Router) {
 		if h.auth != nil {
@@ -106,7 +110,12 @@ type patchSettingsRequest struct {
 }
 
 func (h *Handler) getWorkspace(w http.ResponseWriter, r *http.Request) {
-	prods := h.svc.GetProducts(r.Context())
+	rawClinicID := ctxkey.ClinicID(r.Context())
+	var wsID id.ID
+	if rawClinicID != "" {
+		wsID, _ = id.Parse(rawClinicID)
+	}
+	prods := h.svc.GetProductsForWorkspace(r.Context(), wsID)
 	httpx.WriteJSON(w, http.StatusOK, productsResponse{Products: prods})
 }
 

@@ -11,10 +11,16 @@ import (
 
 type Service struct {
 	store SettingsStore
+	sub   SubscriptionReader
 }
 
 func NewService(store SettingsStore) *Service {
 	return &Service{store: store}
+}
+
+func (s *Service) WithSubscription(sub SubscriptionReader) *Service {
+	s.sub = sub
+	return s
 }
 
 func (s *Service) GetSettings(ctx context.Context, workspaceID id.ID) (domain.Settings, error) {
@@ -180,6 +186,19 @@ func (s *Service) UpdateSettings(ctx context.Context, workspaceID id.ID, input U
 }
 
 func (s *Service) GetProducts(ctx context.Context) []domain.Product {
+	return s.GetProductsForWorkspace(ctx, id.ID{})
+}
+
+func (s *Service) GetProductsForWorkspace(ctx context.Context, wsID id.ID) []domain.Product {
+	if s.sub != nil && !wsID.IsZero() {
+		_, allowsUltimate, err := s.sub.GetActiveTier(ctx, wsID)
+		if err == nil {
+			return []domain.Product{
+				{ID: "classic", Open: true},
+				{ID: "ultimate", Open: allowsUltimate},
+			}
+		}
+	}
 	return domain.AvailableProducts()
 }
 

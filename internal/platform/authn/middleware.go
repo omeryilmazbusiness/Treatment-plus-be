@@ -26,3 +26,22 @@ func (j *JWT) Require(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
+
+func (j *JWT) Optional(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw := Bearer(r.Header.Get("Authorization"))
+		if raw == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		principal, err := j.ParseAccess(raw)
+		if err != nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+		ctx := ctxkey.WithClinicID(r.Context(), principal.WorkspaceID.String())
+		ctx = ctxkey.WithUserID(ctx, principal.UserID.String())
+		ctx = ctxkey.WithRole(ctx, string(principal.Role))
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}

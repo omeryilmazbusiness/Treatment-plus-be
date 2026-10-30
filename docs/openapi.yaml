@@ -387,6 +387,87 @@ paths:
       responses:
         "200":
           description: PDF binary
+  /public/subscriptions/plans:
+    get:
+      summary: Public listing of active subscription plans and pricing
+      operationId: listPublicSubscriptionPlans
+      responses:
+        "200":
+          description: List of subscription plans
+  /public/demo-requests:
+    post:
+      summary: Submit a personalized demo request (Please Design My Demo)
+      operationId: submitDemoRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [website_url]
+              properties:
+                website_url: { type: string }
+                clinic_name: { type: string }
+                contact_name: { type: string }
+                email: { type: string }
+                phone: { type: string }
+                notes: { type: string }
+      responses:
+        "201":
+          description: Created
+  /subscriptions/plans:
+    get:
+      summary: List all subscription plans for clinic
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: List of subscription plans
+  /subscriptions/current:
+    get:
+      summary: Retrieve current clinic subscription status, quota, and tier
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Current subscription details
+  /subscriptions/subscribe:
+    post:
+      summary: Subscribe clinic to a subscription plan
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plan_id]
+              properties:
+                plan_id: { type: string }
+      responses:
+        "200":
+          description: Subscription activated
+  /subscriptions/change-tier:
+    post:
+      summary: Upgrade or change subscription tier (e.g. Classic to Ultimate, Monthly to Yearly)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plan_id]
+              properties:
+                plan_id: { type: string }
+      responses:
+        "200":
+          description: Subscription updated
+  /subscriptions/cancel:
+    post:
+      summary: Cancel subscription at the end of the current billing period
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Subscription marked for cancellation
   /p/{token}:
     get:
       summary: Interactive mobile-first Web view of the Ultimate treatment plan

@@ -19,6 +19,7 @@ type Service struct {
 	patientStore PatientStore
 	catalog      CatalogReader
 	settings     SettingsReader
+	sub          SubscriptionEnforcer
 	encrypter    Encrypter
 	log          *slog.Logger
 }
@@ -38,6 +39,12 @@ func NewService(
 		encrypter:    encrypter,
 		log:          slog.Default(),
 	}
+}
+
+// WithSubscription configures the subscription & quota enforcer.
+func (s *Service) WithSubscription(sub SubscriptionEnforcer) *Service {
+	s.sub = sub
+	return s
 }
 
 // WithLogger configures structured logger on the service.
@@ -263,8 +270,18 @@ func (s *Service) CreatePlan(ctx context.Context, wsID id.ID, input CreatePlanIn
 		return domain.Plan{}, err
 	}
 
+	if s.sub != nil {
+		if err := s.sub.CanCreatePlan(ctx, wsID, string(planKind)); err != nil {
+			return domain.Plan{}, err
+		}
+	}
+
 	if err := s.planStore.CreatePlan(ctx, p); err != nil {
 		return domain.Plan{}, err
+	}
+
+	if s.sub != nil {
+		_ = s.sub.RecordPlanUsage(ctx, wsID)
 	}
 
 	s.logger().InfoContext(ctx, "plan created", "workspace_id", wsID, "plan_id", p.ID, "kind", p.Kind)

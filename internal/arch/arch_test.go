@@ -29,7 +29,7 @@ var domainForbidden = []string{
 }
 
 var contexts = []string{
-	"identity", "clinic", "catalog", "plan", "media", "output", "share", "ai", "viz",
+	"identity", "clinic", "catalog", "plan", "media", "output", "share", "ai", "viz", "subscription",
 }
 
 func TestDomainHasNoInfrastructureImports(t *testing.T) {

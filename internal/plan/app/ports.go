@@ -80,6 +80,11 @@ type Encrypter interface {
 	Decrypt(ciphertext string) (string, error)
 }
 
+type SubscriptionEnforcer interface {
+	CanCreatePlan(ctx context.Context, wsID id.ID, kind string) error
+	RecordPlanUsage(ctx context.Context, wsID id.ID) error
+}
+
 type PatientStore interface {
 	ListPatients(ctx context.Context, wsID id.ID) ([]domain.Patient, error)
 	GetPatient(ctx context.Context, wsID id.ID, patientID id.ID) (domain.Patient, error)

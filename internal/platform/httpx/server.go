@@ -47,13 +47,9 @@ func NewServer(opts Options) *Server {
 
 	r.Get("/healthz", handleHealthz)
 	r.Get("/readyz", handleReadyz(opts.Ready))
-	r.Get("/workspace", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"products": []map[string]any{
-				{"id": "classic", "open": true},
-				{"id": "ultimate", "open": true},
-			},
-		})
+	r.Get("/workspace", func(w http.ResponseWriter, req *http.Request) {
+		req.URL.Path = "/v1/workspace"
+		r.ServeHTTP(w, req)
 	})
 
 	r.Get("/p/{token}", func(w http.ResponseWriter, req *http.Request) {
