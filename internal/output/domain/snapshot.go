@@ -47,6 +47,7 @@ type Clinic struct {
 	Lab         Lab    `json:"lab"`
 	Awards      Awards `json:"awards"`
 	Hotel       Hotel  `json:"hotel"`
+	SmileKey    string `json:"smile_key,omitempty"`
 }
 
 type Stat struct {

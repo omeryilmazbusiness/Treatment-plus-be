@@ -46,9 +46,12 @@ func (d *doc) footer() {
 	if name == "" {
 		name = "Treatment Plus"
 	}
-	d.pdf.CellFormat(120, 5, name, "", 0, "L", false, 0, "")
-	d.pdf.SetXY(140, 289.5)
-	d.pdf.CellFormat(54, 5, fmt.Sprintf("%s %d / 24", d.copy.Page, d.pdf.PageNo()), "", 0, "R", false, 0, "")
+	if len([]rune(name)) > 35 {
+		name = string([]rune(name)[:32]) + "..."
+	}
+	d.pdf.CellFormat(90, 5, name, "", 0, "L", false, 0, "")
+	d.pdf.SetXY(145, 289.5)
+	d.pdf.CellFormat(49, 5, fmt.Sprintf("%s %d / 24", d.copy.Page, d.pdf.PageNo()), "", 0, "R", false, 0, "")
 }
 
 func (d *doc) headerBar(title string) {

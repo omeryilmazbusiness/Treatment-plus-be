@@ -58,7 +58,10 @@ func (h *Handler) download(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, err)
 		return
 	}
-	doc, err := h.svc.Get(r.Context(), wsID, planID)
+	doc, err := h.svc.Generate(r.Context(), wsID, planID)
+	if err != nil {
+		doc, err = h.svc.Get(r.Context(), wsID, planID)
+	}
 	if err != nil {
 		httpx.WriteError(w, err)
 		return

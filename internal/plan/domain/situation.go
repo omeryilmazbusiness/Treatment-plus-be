@@ -108,15 +108,19 @@ func ItemTeeth(tooth *string, teeth []string) (*string, []string) {
 	seen := map[string]struct{}{}
 	var all []string
 	add := func(raw string) {
-		raw = strings.TrimSpace(raw)
-		if raw == "" {
-			return
+		for _, part := range strings.FieldsFunc(raw, func(r rune) bool {
+			return r == ',' || r == ';' || r == ' ' || r == '\t'
+		}) {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			if _, ok := seen[part]; ok {
+				continue
+			}
+			seen[part] = struct{}{}
+			all = append(all, part)
 		}
-		if _, ok := seen[raw]; ok {
-			return
-		}
-		seen[raw] = struct{}{}
-		all = append(all, raw)
 	}
 	if tooth != nil {
 		add(*tooth)

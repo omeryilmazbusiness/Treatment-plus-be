@@ -24,6 +24,7 @@ type Images struct {
 	Lab    []byte
 	Hotel  []byte
 	Award  []byte
+	Smile  []byte
 }
 
 type AssetResolver interface {

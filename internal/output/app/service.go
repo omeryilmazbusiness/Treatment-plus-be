@@ -59,6 +59,7 @@ func (s *Service) Generate(ctx context.Context, workspaceID, planID id.ID) (doma
 	images.Xray = s.resolve(ctx, workspaceID, snap.Situation.XrayKey)
 	images.Lab = s.resolve(ctx, workspaceID, snap.Clinic.Lab.ImageKey)
 	images.Hotel = s.resolve(ctx, workspaceID, snap.Clinic.Hotel.ImageKey)
+	images.Smile = s.resolve(ctx, workspaceID, snap.Clinic.SmileKey)
 
 	raw, pages, err := s.render.Render(ctx, snap, images)
 	if err != nil {

@@ -543,7 +543,10 @@ type sharePDFAdapter struct {
 }
 
 func (a *sharePDFAdapter) GetPlanPDF(ctx context.Context, clinicID, planID id.ID) ([]byte, error) {
-	doc, err := a.svc.Get(ctx, clinicID, planID)
+	doc, err := a.svc.Generate(ctx, clinicID, planID)
+	if err != nil {
+		doc, err = a.svc.Get(ctx, clinicID, planID)
+	}
 	if err != nil {
 		return nil, err
 	}
