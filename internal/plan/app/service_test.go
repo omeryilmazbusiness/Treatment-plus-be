@@ -296,6 +296,19 @@ func (m *mockPlanStore) SetReady(_ context.Context, wsID id.ID, planID id.ID, sn
 	return nil
 }
 
+func (m *mockPlanStore) ReopenDraft(_ context.Context, wsID id.ID, planID id.ID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	p, ok := m.plans[planID]
+	if !ok || p.WorkspaceID != wsID {
+		return errx.New("cannot_reopen", "plan not found", errx.ErrNotFound)
+	}
+	p.Status = domain.StatusDraft
+	p.UpdatedAt = time.Now().UTC()
+	m.plans[planID] = p
+	return nil
+}
+
 func ptr[T any](v T) *T { return &v }
 
 func setupTestService() (*app.Service, *mockPlanStore, *mockPatientStore, *stubCatalog, *stubSettings, *stubEncrypter) {
