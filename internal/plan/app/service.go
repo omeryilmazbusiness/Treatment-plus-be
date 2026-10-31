@@ -695,6 +695,14 @@ func (s *Service) SetReady(ctx context.Context, wsID id.ID, planID id.ID) (domai
 	return s.GetPlan(ctx, wsID, planID)
 }
 
+func (s *Service) ReopenDraft(ctx context.Context, wsID id.ID, planID id.ID) (domain.Plan, error) {
+	if err := s.planStore.ReopenDraft(ctx, wsID, planID); err != nil {
+		return domain.Plan{}, err
+	}
+	s.logger().InfoContext(ctx, "plan reopened to draft and unlocked", "workspace_id", wsID, "plan_id", planID)
+	return s.GetPlan(ctx, wsID, planID)
+}
+
 type ClassicPatientInput struct {
 	Name    string
 	Contact string

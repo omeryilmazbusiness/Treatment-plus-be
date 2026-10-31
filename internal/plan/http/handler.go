@@ -51,6 +51,7 @@ func (h *Handler) Register(r chi.Router) {
 		r.Put("/plans/{id}/items", h.putItems)
 		r.Put("/plans/{id}/discounts", h.putDiscounts)
 		r.Post("/plans/{id}/ready", h.setReady)
+		r.Post("/plans/{id}/reopen", h.reopenPlan)
 	})
 }
 
@@ -483,6 +484,25 @@ func (h *Handler) setReady(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pl, err := h.svc.SetReady(r.Context(), wsID, planID)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, pl)
+}
+
+func (h *Handler) reopenPlan(w http.ResponseWriter, r *http.Request) {
+	wsID, err := h.getWorkspaceID(r)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	planID, err := id.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		httpx.WriteError(w, errx.New("invalid_id", "malformed plan id", errx.ErrInvalid))
+		return
+	}
+	pl, err := h.svc.ReopenDraft(r.Context(), wsID, planID)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return

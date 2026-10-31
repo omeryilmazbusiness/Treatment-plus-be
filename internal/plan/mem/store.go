@@ -237,6 +237,22 @@ func (s *Store) SetReady(ctx context.Context, wsID id.ID, planID id.ID, snapshot
 	return nil
 }
 
+func (s *Store) ReopenDraft(ctx context.Context, wsID id.ID, planID id.ID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := denyWrite(ctx, wsID); err != nil {
+		return err
+	}
+	row, ok := s.plans[planID]
+	if !ok || row.plan.WorkspaceID != wsID {
+		return errx.ErrNotFound
+	}
+	row.plan.Status = domain.StatusDraft
+	row.plan.UpdatedAt = time.Now().UTC()
+	s.plans[planID] = row
+	return nil
+}
+
 func (s *Store) hydrate(row planRow) domain.Plan {
 	p := row.plan
 	p.Visits = append([]domain.Visit(nil), row.visits...)

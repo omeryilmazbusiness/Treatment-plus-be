@@ -666,6 +666,26 @@ func (s *Store) SetReady(ctx context.Context, wsID id.ID, planID id.ID, snapshot
 	})
 }
 
+func (s *Store) ReopenDraft(ctx context.Context, wsID id.ID, planID id.ID) error {
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if err := rls.Apply(ctx, tx); err != nil {
+			return err
+		}
+		tag, err := tx.Exec(ctx, `
+			UPDATE plans
+			SET status = 'draft', updated_at = now()
+			WHERE workspace_id = $1 AND id = $2
+		`, toUUID(wsID), toUUID(planID))
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return errx.ErrNotFound
+		}
+		return nil
+	})
+}
+
 func toUUID(v id.ID) pgtype.UUID {
 	var u pgtype.UUID
 	copy(u.Bytes[:], v.Bytes())

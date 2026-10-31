@@ -100,4 +100,5 @@ type PlanStore interface {
 	ReplaceItems(ctx context.Context, wsID id.ID, planID id.ID, items []domain.Item, totals domain.Totals) error
 	ReplaceDiscounts(ctx context.Context, wsID id.ID, planID id.ID, discounts []domain.Discount, totals domain.Totals) error
 	SetReady(ctx context.Context, wsID id.ID, planID id.ID, snapshotJSON []byte) error
+	ReopenDraft(ctx context.Context, wsID id.ID, planID id.ID) error
 }
