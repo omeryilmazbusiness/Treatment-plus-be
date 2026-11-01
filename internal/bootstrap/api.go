@@ -133,7 +133,7 @@ func toClinicStats(in []identityapp.ClinicStat) []clinicdomain.Stat {
 	return out
 }
 
-func provisionClinic(svc *clinicapp.Service) identityapp.ProfileFunc {
+func provisionClinic(svc *clinicapp.Service, sub *subapp.Service) identityapp.ProfileFunc {
 	return func(ctx context.Context, wsID id.ID, profile identityapp.ClinicProfile) error {
 		_, err := svc.Onboard(ctx, wsID, clinicapp.OnboardInput{
 			Name:        profile.Name,
@@ -168,7 +168,14 @@ func provisionClinic(svc *clinicapp.Service) identityapp.ProfileFunc {
 			Hotel:        clinicdomain.Hotel{Name: profile.Hotel.Name, Text: profile.Hotel.Text, ImageKey: profile.Hotel.ImageKey},
 			RequireBrand: profile.RequireBrand,
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		if sub != nil {
+			// Auto-provision initial subscription tier so new clinics can create treatment plans out-of-the-box.
+			_, _ = sub.Subscribe(ctx, wsID, "ultimate_yearly")
+		}
+		return nil
 	}
 }
 
@@ -201,6 +208,10 @@ func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, err
 	clinicStore := clinicpg.New(pool)
 	clinicSvc := clinicapp.NewService(clinicStore)
 
+	subStore := subpg.New(pool)
+	subSvc := subapp.NewService(subStore, clk)
+	clinicSvc.WithSubscription(&clinicSubAdapter{svc: subSvc})
+
 	identitySvc, err := identityapp.NewService(
 		identityStore,
 		identityStore,
@@ -210,7 +221,7 @@ func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, err
 		tokens,
 		clk,
 		cfg.Auth.RefreshTTL,
-		provisionClinic(clinicSvc),
+		provisionClinic(clinicSvc, subSvc),
 	)
 	if err != nil {
 		pool.Close()
@@ -247,9 +258,6 @@ func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, err
 		cfg.App.URL,
 	)
 
-	subStore := subpg.New(pool)
-	subSvc := subapp.NewService(subStore, clk)
-	clinicSvc.WithSubscription(&clinicSubAdapter{svc: subSvc})
 	planSvc.WithSubscription(&planSubAdapter{svc: subSvc})
 
 	srv := httpx.NewServer(httpx.Options{

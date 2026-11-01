@@ -1,12 +1,19 @@
 package domain
 
-import "strings"
+import (
+	"encoding/json"
+	"strings"
+)
 
 const (
-	ToothIntact  = "intact"
-	ToothMissing = "missing"
-	ToothFilled  = "filled"
-	ToothCrown   = "crown"
+	ToothIntact    = "intact"
+	ToothMissing   = "missing"
+	ToothFilled    = "filled"
+	ToothCrown     = "crown"
+	ToothCaries    = "caries"
+	ToothRootCanal = "root_canal"
+	ToothImplant   = "implant"
+	ToothBridge    = "bridge"
 )
 
 // ToothFinding is one FDI cell on the current-situation odontogram (Wise p.9).
@@ -29,7 +36,7 @@ func (f ToothFinding) Valid() bool {
 		return false
 	}
 	switch f.Status {
-	case "", ToothIntact, ToothMissing, ToothFilled, ToothCrown:
+	case "", ToothIntact, ToothMissing, ToothFilled, ToothCrown, ToothCaries, ToothRootCanal, ToothImplant, ToothBridge:
 		return true
 	default:
 		return false
@@ -42,6 +49,40 @@ type Situation struct {
 	ChartTeeth       []string       `json:"chart_teeth,omitempty"`
 	ToothFindings    []ToothFinding `json:"tooth_findings,omitempty"`
 	GeneralDiagnoses []string       `json:"general_diagnoses,omitempty"`
+}
+
+func (s *Situation) UnmarshalJSON(data []byte) error {
+	type rawSituation struct {
+		XrayKey          string         `json:"xray_key"`
+		XrayKeyCamel     string         `json:"xrayKey"`
+		ChartTeeth       []string       `json:"chart_teeth"`
+		ChartTeethCamel  []string       `json:"chartTeeth"`
+		ToothFindings    []ToothFinding `json:"tooth_findings"`
+		ToothFindingsCam []ToothFinding `json:"toothFindings"`
+		GeneralDiags     []string       `json:"general_diagnoses"`
+		GeneralDiagsCam  []string       `json:"generalDiagnoses"`
+	}
+	var raw rawSituation
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	s.XrayKey = raw.XrayKey
+	if s.XrayKey == "" {
+		s.XrayKey = raw.XrayKeyCamel
+	}
+	s.ChartTeeth = raw.ChartTeeth
+	if len(s.ChartTeeth) == 0 {
+		s.ChartTeeth = raw.ChartTeethCamel
+	}
+	s.ToothFindings = raw.ToothFindings
+	if len(s.ToothFindings) == 0 {
+		s.ToothFindings = raw.ToothFindingsCam
+	}
+	s.GeneralDiagnoses = raw.GeneralDiags
+	if len(s.GeneralDiagnoses) == 0 {
+		s.GeneralDiagnoses = raw.GeneralDiagsCam
+	}
+	return nil
 }
 
 func (s Situation) Normalize() Situation {
