@@ -244,9 +244,9 @@ function makeCoreCap(rad) {
   const mesh = new THREE.Mesh(
     new THREE.SphereGeometry(rad, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.55),
     new THREE.MeshPhysicalMaterial({
-      color: 0xf8f1e7,
-      roughness: 0.28,
-      metalness: 0.04,
+      color: 0xd8ccb8,
+      roughness: 0.32,
+      metalness: 0.02,
       transparent: true,
       opacity: 0,
     }),
@@ -256,14 +256,14 @@ function makeCoreCap(rad) {
   return mesh;
 }
 
-function attachDirectorMat(mesh, uniforms, key) {
+function attachDirectorMat(mesh, uniforms, key, isSaliva = false) {
   if (!mesh?.isMesh) {
-    mesh?.traverse((n) => { if (n.isMesh) attachDirectorMat(n, uniforms, key); });
+    mesh?.traverse((n) => { if (n.isMesh) attachDirectorMat(n, uniforms, key, isSaliva); });
     return;
   }
   if (!mesh.userData._dirPrev) mesh.userData._dirPrev = mesh.material;
   const m = mesh.material.clone();
-  if (key.includes("section")) m.side = THREE.DoubleSide;
+  if (key.includes("section") && !isSaliva) m.side = THREE.DoubleSide;
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uPulse = uniforms.uPulse;
     shader.uniforms.uScan = uniforms.uScan;
@@ -273,13 +273,34 @@ function attachDirectorMat(mesh, uniforms, key) {
     shader.uniforms.uRadius = uniforms.uRadius;
     shader.uniforms.uPlaneN = uniforms.uPlaneN;
     shader.uniforms.uPlaneC = uniforms.uPlaneC;
-    shader.vertexShader = `varying vec3 vWorldPos;\n` + shader.vertexShader.replace(
-      `#include <worldpos_vertex>`,
-      `#include <worldpos_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`,
-    );
+    shader.uniforms.uFdiCenter = uniforms.uFdiCenter;
+    shader.uniforms.uFdiRadius = uniforms.uFdiRadius;
+    shader.uniforms.uExtractMask = uniforms.uExtractMask;
+    shader.uniforms.uPrepShrink = uniforms.uPrepShrink;
+    shader.uniforms.uCariesSpot = uniforms.uCariesSpot;
+    shader.vertexShader = `
+      uniform vec3 uFdiCenter; uniform float uFdiRadius; uniform float uExtractMask; uniform float uPrepShrink;
+      varying vec3 vWorldPos;
+    \n` + shader.vertexShader
+      .replace(
+        `#include <begin_vertex>`,
+        `#include <begin_vertex>
+        vec3 wpPre = (modelMatrix * vec4(transformed, 1.0)).xyz;
+        float dFdi = length((wpPre - uFdiCenter) * vec3(1.3, 0.6, 1.3));
+        float inFdi = 1.0 - smoothstep(uFdiRadius * 0.72, uFdiRadius, dFdi);
+        if (uPrepShrink > 0.001 && inFdi > 0.01) {
+          transformed -= objectNormal * (uPrepShrink * inFdi * uFdiRadius * 38.0);
+        }
+        `,
+      )
+      .replace(
+        `#include <worldpos_vertex>`,
+        `#include <worldpos_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`,
+      );
     shader.fragmentShader = `
       uniform float uPulse; uniform float uScan; uniform float uSection; uniform float uClean;
       uniform vec3 uFocus; uniform float uRadius; uniform vec3 uPlaneN; uniform float uPlaneC;
+      uniform vec3 uFdiCenter; uniform float uFdiRadius; uniform float uExtractMask; uniform float uPrepShrink; uniform float uCariesSpot;
       varying vec3 vWorldPos;
     ` + shader.fragmentShader.replace(
       `#include <dithering_fragment>`,
@@ -287,6 +308,14 @@ function attachDirectorMat(mesh, uniforms, key) {
       vec3 dp = vWorldPos - uFocus;
       float radial = length(dp * vec3(1.35, 0.55, 1.35));
       float inTooth = 1.0 - smoothstep(uRadius * 0.72, uRadius, radial);
+      vec3 dpFdi = vWorldPos - uFdiCenter;
+      float radialFdi = length(dpFdi * vec3(1.35, 0.55, 1.35));
+      float inFdiTooth = 1.0 - smoothstep(uFdiRadius * 0.72, uFdiRadius, radialFdi);
+      if (uExtractMask * inFdiTooth > 0.35) discard;
+      if (uCariesSpot > 0.01 && inFdiTooth > 0.15 && !${isSaliva ? "true" : "false"}) {
+        float cMask = 1.0 - smoothstep(0.0, uFdiRadius * 0.45, radialFdi);
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.16, 0.11, 0.08), cMask * uCariesSpot * 0.88);
+      }
       if (uScan > 0.001) {
         float ring = smoothstep(0.28, 0.55, radial) * (1.0 - smoothstep(0.70, 0.96, radial));
         float glow = inTooth * ring * uScan * (0.55 + 0.45 * abs(sin(uPulse * 6.28318)));
@@ -295,11 +324,11 @@ function attachDirectorMat(mesh, uniforms, key) {
       if (uSection > 0.5 && inTooth > 0.35) {
         float side = dot(vWorldPos, uPlaneN) + uPlaneC;
         if (side > 0.0) discard;
-        if (!gl_FrontFacing) {
+        if (!gl_FrontFacing && !${isSaliva ? "true" : "false"}) {
           float r = clamp(radial / max(uRadius, 0.001), 0.0, 1.0);
-          vec3 pulp = mix(vec3(0.70, 0.30, 0.34) * (0.94 + 0.08 * uPulse), vec3(0.14, 0.12, 0.12), uClean);
-          vec3 dentin = vec3(0.82, 0.70, 0.50);
-          vec3 enamel = vec3(0.95, 0.92, 0.87);
+          vec3 pulp = mix(vec3(0.70, 0.30, 0.34) * (0.94 + 0.08 * uPulse), vec3(0.85, 0.77, 0.66), uClean);
+          vec3 dentin = vec3(0.82, 0.71, 0.55);
+          vec3 enamel = vec3(0.88, 0.82, 0.72);
           vec3 col = mix(pulp, dentin, smoothstep(0.12, 0.40, r));
           col = mix(col, enamel, smoothstep(0.55, 0.84, r));
           gl_FragColor = vec4(col, 1.0);
@@ -307,7 +336,7 @@ function attachDirectorMat(mesh, uniforms, key) {
       }`,
     );
   };
-  m.customProgramCacheKey = () => key;
+  m.customProgramCacheKey = () => `${key}-${isSaliva ? "saliva" : "teeth"}`;
   m.needsUpdate = true;
   mesh.material = m;
 }
@@ -356,6 +385,11 @@ function bindUniforms(molar, radius, planeN) {
     uRadius: { value: radius },
     uPlaneN: { value: n },
     uPlaneC: { value: -n.dot(molar) },
+    uFdiCenter: { value: molar.clone() },
+    uFdiRadius: { value: radius },
+    uExtractMask: { value: 0 },
+    uPrepShrink: { value: 0 },
+    uCariesSpot: { value: 0 },
   };
 }
 
