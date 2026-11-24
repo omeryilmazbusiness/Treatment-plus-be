@@ -104,7 +104,7 @@ func (s *Store) GetClinicSubscription(ctx context.Context, clinicID id.ID) (doma
 			SELECT cs.id, cs.workspace_id, cs.plan_id, cs.status,
 			       cs.current_period_start, cs.current_period_end,
 			       cs.cancel_at_period_end, cs.canceled_at, cs.plans_created_count,
-			       cs.created_at, cs.updated_at,
+			       cs.usage_period_start, cs.created_at, cs.updated_at,
 			       sp.id, sp.tier, sp.name, sp.description, sp.billing_interval,
 			       sp.price_cents, sp.currency, sp.plan_quota, sp.has_3d_viz,
 			       sp.has_patient_portal, sp.has_telemetry, sp.has_digital_signature,
@@ -118,7 +118,7 @@ func (s *Store) GetClinicSubscription(ctx context.Context, clinicID id.ID) (doma
 			&subIDUUID, &wsUUID, &out.PlanID, &out.Status,
 			&out.CurrentPeriodStart, &out.CurrentPeriodEnd,
 			&out.CancelAtPeriodEnd, &canceledAt, &out.PlansCreatedCount,
-			&out.CreatedAt, &out.UpdatedAt,
+			&out.UsagePeriodStart, &out.CreatedAt, &out.UpdatedAt,
 			&out.Plan.ID, &out.Plan.Tier, &out.Plan.Name, &out.Plan.Description, &out.Plan.BillingInterval,
 			&out.Plan.PriceCents, &out.Plan.Currency, &out.Plan.PlanQuota, &out.Plan.Has3DViz,
 			&out.Plan.HasPatientPortal, &out.Plan.HasTelemetry, &out.Plan.HasDigitalSignature,
@@ -151,9 +151,9 @@ func (s *Store) UpsertClinicSubscription(ctx context.Context, sub domain.ClinicS
 		tag, err := tx.Exec(ctx, `
 			INSERT INTO clinic_subscriptions (
 				id, workspace_id, plan_id, status, current_period_start, current_period_end,
-				cancel_at_period_end, canceled_at, plans_created_count, created_at, updated_at
+				cancel_at_period_end, canceled_at, plans_created_count, usage_period_start, created_at, updated_at
 			) VALUES (
-				$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+				$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 			)
 			ON CONFLICT (workspace_id) DO UPDATE SET
 				plan_id = EXCLUDED.plan_id,
@@ -173,6 +173,7 @@ func (s *Store) UpsertClinicSubscription(ctx context.Context, sub domain.ClinicS
 			sub.CancelAtPeriodEnd,
 			sub.CanceledAt,
 			sub.PlansCreatedCount,
+			nonZeroTime(sub.UsagePeriodStart, sub.CreatedAt),
 			sub.CreatedAt,
 			sub.UpdatedAt,
 		)
@@ -205,6 +206,34 @@ func (s *Store) IncrementPlanCount(ctx context.Context, clinicID id.ID) error {
 		}
 		return nil
 	})
+}
+
+func (s *Store) ResetUsage(ctx context.Context, clinicID id.ID, periodStart time.Time) error {
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if err := rls.Apply(ctx, tx); err != nil {
+			return err
+		}
+
+		tag, err := tx.Exec(ctx, `
+			UPDATE clinic_subscriptions
+			SET plans_created_count = 0, usage_period_start = $2, updated_at = now()
+			WHERE workspace_id = $1
+		`, toUUID(clinicID), periodStart)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return errx.New("subscription_not_found", "subscription not found", errx.ErrNotFound)
+		}
+		return nil
+	})
+}
+
+func nonZeroTime(t, fallback time.Time) time.Time {
+	if t.IsZero() {
+		return fallback
+	}
+	return t
 }
 
 func (s *Store) CreateDemoRequest(ctx context.Context, req domain.DemoRequest) error {

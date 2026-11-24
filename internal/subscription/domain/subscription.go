@@ -115,6 +115,7 @@ type ClinicSubscription struct {
 	CancelAtPeriodEnd  bool               `json:"cancel_at_period_end"`
 	CanceledAt         *time.Time         `json:"canceled_at,omitempty"`
 	PlansCreatedCount  int                `json:"plans_created_count"`
+	UsagePeriodStart   time.Time          `json:"usage_period_start"`
 	CreatedAt          time.Time          `json:"created_at"`
 	UpdatedAt          time.Time          `json:"updated_at"`
 }
@@ -132,6 +133,33 @@ func (s ClinicSubscription) AllowsKind(kind string) bool {
 		return s.Plan.Tier.AllowsUltimate()
 	}
 	return true
+}
+
+// UsagePeriodEnd is when the current monthly PDF allowance window resets.
+func (s ClinicSubscription) UsagePeriodEnd() time.Time {
+	return s.UsagePeriodStart.AddDate(0, 1, 0)
+}
+
+// RollUsage returns the subscription with its monthly usage window advanced to
+// the one containing now, resetting the counter if a window boundary was crossed.
+// The bool reports whether anything changed (and must be persisted).
+func (s ClinicSubscription) RollUsage(now time.Time) (ClinicSubscription, bool) {
+	if s.UsagePeriodStart.IsZero() {
+		s.UsagePeriodStart = s.CurrentPeriodStart
+		if s.UsagePeriodStart.IsZero() {
+			s.UsagePeriodStart = now
+		}
+	}
+	if now.Before(s.UsagePeriodEnd()) {
+		return s, false
+	}
+	start := s.UsagePeriodStart
+	for !now.Before(start.AddDate(0, 1, 0)) {
+		start = start.AddDate(0, 1, 0)
+	}
+	s.UsagePeriodStart = start
+	s.PlansCreatedCount = 0
+	return s, true
 }
 
 func (s ClinicSubscription) IsQuotaExceeded() bool {

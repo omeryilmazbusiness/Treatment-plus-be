@@ -96,3 +96,27 @@ func TestClinicSubscription_QuotaAndState(t *testing.T) {
 	}
 }
 
+
+func TestClinicSubscription_RollUsage(t *testing.T) {
+	start := time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC)
+	sub := domain.ClinicSubscription{UsagePeriodStart: start, PlansCreatedCount: 12}
+
+	same, changed := sub.RollUsage(start.AddDate(0, 0, 10))
+	if changed || same.PlansCreatedCount != 12 {
+		t.Fatalf("inside the window nothing should change: %+v changed=%v", same, changed)
+	}
+
+	later, changed := sub.RollUsage(start.AddDate(0, 3, 5))
+	if !changed || later.PlansCreatedCount != 0 {
+		t.Fatalf("crossing windows must reset: %+v changed=%v", later, changed)
+	}
+	if !later.UsagePeriodStart.After(start) || later.UsagePeriodEnd().Before(start.AddDate(0, 3, 5)) {
+		t.Fatalf("window must contain now, got start=%s", later.UsagePeriodStart)
+	}
+
+	legacy := domain.ClinicSubscription{CurrentPeriodStart: start, PlansCreatedCount: 3}
+	got, _ := legacy.RollUsage(start.AddDate(0, 0, 1))
+	if got.UsagePeriodStart.IsZero() || got.PlansCreatedCount != 3 {
+		t.Fatalf("zero usage start must fall back to period start: %+v", got)
+	}
+}

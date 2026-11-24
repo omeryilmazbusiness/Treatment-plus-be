@@ -42,6 +42,9 @@ type SubscriptionSummaryDTO struct {
 	DaysRemaining      int                     `json:"days_remaining"`
 	CancelAtPeriodEnd  bool                    `json:"cancel_at_period_end"`
 	PlansCreatedCount  int                     `json:"plans_created_count"`
+	UsagePeriodStart   time.Time               `json:"usage_period_start"`
+	UsagePeriodEnd     time.Time               `json:"usage_period_end"`
+	UsageDaysRemaining int                     `json:"usage_days_remaining"`
 	PlanQuota          int                     `json:"plan_quota"`
 	QuotaRemaining     int                     `json:"quota_remaining"`
 	AllowsClassic      bool                    `json:"allows_classic"`
@@ -53,16 +56,13 @@ func (s *Service) GetCurrentSubscription(ctx context.Context, clinicID id.ID) (S
 	if clinicID.IsZero() {
 		return SubscriptionSummaryDTO{}, errx.New("invalid_clinic_id", "clinic id is required", errx.ErrInvalid)
 	}
-	sub, err := s.store.GetClinicSubscription(ctx, clinicID)
+	sub, err := s.loadRolled(ctx, clinicID)
 	if err != nil {
 		return SubscriptionSummaryDTO{}, err
 	}
 
 	now := s.clock.Now()
-	daysRem := int(math.Ceil(sub.CurrentPeriodEnd.Sub(now).Hours() / 24.0))
-	if daysRem < 0 {
-		daysRem = 0
-	}
+	daysRem := daysUntil(now, sub.CurrentPeriodEnd)
 
 	return SubscriptionSummaryDTO{
 		ID:                 sub.ID.String(),
@@ -75,12 +75,39 @@ func (s *Service) GetCurrentSubscription(ctx context.Context, clinicID id.ID) (S
 		DaysRemaining:      daysRem,
 		CancelAtPeriodEnd:  sub.CancelAtPeriodEnd,
 		PlansCreatedCount:  sub.PlansCreatedCount,
+		UsagePeriodStart:   sub.UsagePeriodStart,
+		UsagePeriodEnd:     sub.UsagePeriodEnd(),
+		UsageDaysRemaining: daysUntil(now, sub.UsagePeriodEnd()),
 		PlanQuota:          sub.Plan.PlanQuota,
 		QuotaRemaining:     sub.QuotaRemaining(),
 		AllowsClassic:      sub.Plan.Tier.AllowsClassic(),
 		AllowsUltimate:     sub.Plan.Tier.AllowsUltimate(),
 		Plan:               sub.Plan,
 	}, nil
+}
+
+func daysUntil(now, end time.Time) int {
+	d := int(math.Ceil(end.Sub(now).Hours() / 24.0))
+	if d < 0 {
+		return 0
+	}
+	return d
+}
+
+// loadRolled reads the clinic subscription and lazily advances its monthly
+// usage window (resetting the PDF counter when a month boundary has passed).
+func (s *Service) loadRolled(ctx context.Context, clinicID id.ID) (domain.ClinicSubscription, error) {
+	sub, err := s.store.GetClinicSubscription(ctx, clinicID)
+	if err != nil {
+		return domain.ClinicSubscription{}, err
+	}
+	rolled, changed := sub.RollUsage(s.clock.Now())
+	if changed {
+		if err := s.store.ResetUsage(ctx, clinicID, rolled.UsagePeriodStart); err != nil {
+			return domain.ClinicSubscription{}, err
+		}
+	}
+	return rolled, nil
 }
 
 func (s *Service) Subscribe(ctx context.Context, clinicID id.ID, planID string) (SubscriptionSummaryDTO, error) {
@@ -116,6 +143,7 @@ func (s *Service) Subscribe(ctx context.Context, clinicID id.ID, planID string) 
 		CurrentPeriodEnd:   periodEnd,
 		CancelAtPeriodEnd:  false,
 		PlansCreatedCount:  0,
+		UsagePeriodStart:   now,
 		CreatedAt:          now,
 		UpdatedAt:          now,
 	}
@@ -198,7 +226,7 @@ func (s *Service) CanCreatePlan(ctx context.Context, clinicID id.ID, kind string
 	if clinicID.IsZero() {
 		return errx.New("invalid_clinic_id", "clinic id is required", errx.ErrInvalid)
 	}
-	sub, err := s.store.GetClinicSubscription(ctx, clinicID)
+	sub, err := s.loadRolled(ctx, clinicID)
 	if err != nil {
 		return errx.New("subscription_required", "active subscription required to create treatment plans", errx.ErrForbidden)
 	}
@@ -213,7 +241,7 @@ func (s *Service) CanCreatePlan(ctx context.Context, clinicID id.ID, kind string
 	}
 
 	if sub.IsQuotaExceeded() {
-		return errx.New("quota_exceeded", "monthly treatment plan quota reached for this billing period", errx.ErrForbidden)
+		return errx.New("quota_exceeded", "monthly PDF allowance reached; buy an extra PDF pack or wait for the next monthly window", errx.ErrForbidden)
 	}
 
 	return nil
@@ -222,6 +250,9 @@ func (s *Service) CanCreatePlan(ctx context.Context, clinicID id.ID, kind string
 func (s *Service) RecordPlanUsage(ctx context.Context, clinicID id.ID) error {
 	if clinicID.IsZero() {
 		return errx.New("invalid_clinic_id", "clinic id is required", errx.ErrInvalid)
+	}
+	if _, err := s.loadRolled(ctx, clinicID); err != nil {
+		return err
 	}
 	return s.store.IncrementPlanCount(ctx, clinicID)
 }

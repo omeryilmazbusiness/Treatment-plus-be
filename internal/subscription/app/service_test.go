@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/clock"
 	"github.com/treatment-plus/treatment-plus-be/internal/shared/errx"
@@ -67,8 +68,8 @@ func TestSubscriptionService_FullLifecycle(t *testing.T) {
 	if upgraded.BillingInterval != "year" {
 		t.Fatalf("expected interval year, got %s", upgraded.BillingInterval)
 	}
-	if upgraded.PlanQuota != -1 {
-		t.Fatalf("expected unlimited quota (-1), got %d", upgraded.PlanQuota)
+	if upgraded.PlanQuota != 60 {
+		t.Fatalf("expected professional monthly allowance 60, got %d", upgraded.PlanQuota)
 	}
 
 	// 6. Now Ultimate plan is permitted
@@ -111,5 +112,48 @@ func TestSubscriptionService_FullLifecycle(t *testing.T) {
 	}
 	if !canceled.CancelAtPeriodEnd {
 		t.Fatal("expected cancel_at_period_end to be true")
+	}
+}
+
+func TestSubscriptionService_MonthlyAllowanceResets(t *testing.T) {
+	ctx := context.Background()
+	store := mem.New()
+	start := time.Date(2026, 1, 10, 9, 0, 0, 0, time.UTC)
+	clinicID := id.New()
+
+	svc := app.NewService(store, clock.Fixed{T: start})
+	if _, err := svc.Subscribe(ctx, clinicID, "classic_yearly"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 30; i++ {
+		if err := svc.RecordPlanUsage(ctx, clinicID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := svc.CanCreatePlan(ctx, clinicID, "classic"); !errors.Is(err, errx.ErrForbidden) {
+		t.Fatalf("expected quota exhausted, got %v", err)
+	}
+
+	// Same window, 20 days later: still exhausted.
+	svc = app.NewService(store, clock.Fixed{T: start.AddDate(0, 0, 20)})
+	cur, err := svc.GetCurrentSubscription(ctx, clinicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cur.QuotaRemaining != 0 || cur.UsageDaysRemaining != 11 {
+		t.Fatalf("want remaining 0 / 11 days, got %d / %d", cur.QuotaRemaining, cur.UsageDaysRemaining)
+	}
+
+	// Next monthly window: counter resets.
+	svc = app.NewService(store, clock.Fixed{T: start.AddDate(0, 1, 1)})
+	cur, err = svc.GetCurrentSubscription(ctx, clinicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cur.PlansCreatedCount != 0 || cur.QuotaRemaining != 30 {
+		t.Fatalf("want reset counter, got used=%d remaining=%d", cur.PlansCreatedCount, cur.QuotaRemaining)
+	}
+	if err := svc.CanCreatePlan(ctx, clinicID, "classic"); err != nil {
+		t.Fatalf("expected plan creation after reset, got %v", err)
 	}
 }

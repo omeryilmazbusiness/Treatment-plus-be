@@ -27,10 +27,10 @@ func New() *Store {
 	s.plans["classic_monthly"] = domain.SubscriptionPlan{
 		ID:              "classic_monthly",
 		Tier:            domain.TierClassic,
-		Name:            "BrightPlans Classic (Monthly)",
+		Name:            "Communication (Monthly)",
 		BillingInterval: domain.IntervalMonth,
-		PriceCents:      4900,
-		Currency:        "EUR",
+		PriceCents:      7500,
+		Currency:        "USD",
 		PlanQuota:       30,
 		IsActive:        true,
 		CreatedAt:       now,
@@ -38,22 +38,22 @@ func New() *Store {
 	s.plans["classic_yearly"] = domain.SubscriptionPlan{
 		ID:              "classic_yearly",
 		Tier:            domain.TierClassic,
-		Name:            "BrightPlans Classic (Yearly)",
+		Name:            "Communication (Yearly)",
 		BillingInterval: domain.IntervalYear,
-		PriceCents:      49000,
-		Currency:        "EUR",
-		PlanQuota:       50,
+		PriceCents:      75000,
+		Currency:        "USD",
+		PlanQuota:       30,
 		IsActive:        true,
 		CreatedAt:       now,
 	}
 	s.plans["ultimate_monthly"] = domain.SubscriptionPlan{
 		ID:                  "ultimate_monthly",
 		Tier:                domain.TierUltimate,
-		Name:                "BrightPlans Ultimate (Monthly)",
+		Name:                "Professional (Monthly)",
 		BillingInterval:     domain.IntervalMonth,
-		PriceCents:          9900,
-		Currency:            "EUR",
-		PlanQuota:           100,
+		PriceCents:          10000,
+		Currency:            "USD",
+		PlanQuota:           60,
 		Has3DViz:            true,
 		HasPatientPortal:    true,
 		HasTelemetry:        true,
@@ -64,11 +64,11 @@ func New() *Store {
 	s.plans["ultimate_yearly"] = domain.SubscriptionPlan{
 		ID:                   "ultimate_yearly",
 		Tier:                 domain.TierUltimate,
-		Name:                 "BrightPlans Ultimate (Yearly)",
+		Name:                 "Professional (Yearly)",
 		BillingInterval:      domain.IntervalYear,
-		PriceCents:           99000,
-		Currency:             "EUR",
-		PlanQuota:            -1,
+		PriceCents:           100000,
+		Currency:             "USD",
+		PlanQuota:            60,
 		Has3DViz:             true,
 		HasPatientPortal:     true,
 		HasTelemetry:         true,
@@ -130,6 +130,20 @@ func (s *Store) IncrementPlanCount(ctx context.Context, clinicID id.ID) error {
 		return errx.New("subscription_not_found", "clinic has no active subscription", errx.ErrNotFound)
 	}
 	sub.PlansCreatedCount++
+	s.subs[clinicID] = sub
+	return nil
+}
+
+func (s *Store) ResetUsage(ctx context.Context, clinicID id.ID, periodStart time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	sub, ok := s.subs[clinicID]
+	if !ok {
+		return errx.New("subscription_not_found", "clinic has no active subscription", errx.ErrNotFound)
+	}
+	sub.PlansCreatedCount = 0
+	sub.UsagePeriodStart = periodStart
 	s.subs[clinicID] = sub
 	return nil
 }

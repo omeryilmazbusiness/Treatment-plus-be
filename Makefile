@@ -1,6 +1,8 @@
-.PHONY: tidy build test vet lint arch run worker migrate-up migrate-down docker-up docker-down up down sqlc vuln
+.PHONY: tidy build test vet lint arch run worker migrate-up migrate-down docker-up docker-down up down sqlc vuln mouth
 
 BIN_DIR := .bin
+MOUTH := internal/viz/player/static/mouth.glb
+MOUTH_URL := https://github.com/omeryilmazbusiness/Treatment-plus-be/releases/download/mouth-glb/mouth.glb
 
 tidy:
 	go mod tidy
@@ -46,8 +48,14 @@ docker-up:
 docker-down:
 	docker compose down
 
-# Laptop: infra → migrate → api. Phase 0 done when /healthz and /readyz return 200.
+# 143MB mouth.glb is gitignored (GitHub 100MB git limit). Collaborators get it from the public Release.
+mouth:
+	@if [ -f "$(MOUTH)" ]; then echo "mouth.glb already present"; \
+	else curl -L --fail --retry 3 -o "$(MOUTH)" "$(MOUTH_URL)"; fi
+
+# Laptop: infra → model → migrate → api. Phase 0 done when /healthz and /readyz return 200.
 up: docker-up
+	$(MAKE) mouth
 	$(MAKE) migrate-up
 	$(MAKE) run
 
