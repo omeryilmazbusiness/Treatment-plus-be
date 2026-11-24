@@ -1,7 +1,7 @@
 import * as THREE from "three";
 
 const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
-const OPEN_ANGLE = 0.16;
+const OPEN_ANGLE = 0.12;
 const HINGE_NAME = "jaw_hinge_pivot";
 
 function pick(root, ...names) {
@@ -32,12 +32,38 @@ function boxOf(obj) {
 
 function fdiMeta(fdi) {
   const n = Number(fdi) || 16;
+  const q = Math.floor(n / 10);
   return {
     n,
-    upper: n < 30,
-    right: (n >= 11 && n <= 18) || (n >= 41 && n <= 48),
+    upper: q === 1 || q === 2 || q === 5 || q === 6,
+    right: q === 1 || q === 4 || q === 5 || q === 8,
     distal: Math.max(0, Math.min(1, ((n % 10) - 1) / 7)),
   };
+}
+
+export function archTypeOf(fdi) {
+  return fdiMeta(fdi).upper ? "upper" : "lower";
+}
+
+function archMesh(root, fdi) {
+  const upper = archTypeOf(fdi) === "upper";
+  return upper
+    ? pick(root, "TeethUpper_midres", "TeethUpper", "Tooth_Upper_Molar_16")
+    : pick(root, "TeethLower_midres", "TeethLower", "Tooth_Lower_Molar_36");
+}
+
+function gumsMesh(root, fdi) {
+  const upper = archTypeOf(fdi) === "upper";
+  return upper
+    ? pick(root, "GumsUpper_midres", "GumsUpper")
+    : pick(root, "GumsLower_midres", "GumsLower");
+}
+
+export function archApproachLabel(fdi) {
+  const { n, upper } = fdiMeta(fdi);
+  return upper
+    ? `Diş ${n} maksilla · ağız tabanından yukarı, damak örtmez`
+    : `Diş ${n} mandibula · üstten aşağı, dil örtmez`;
 }
 
 function fdiPoint(mesh, fdi) {
@@ -59,19 +85,85 @@ function eachMat(obj, fn) {
   });
 }
 
-function lookCam(ctx, pos, target, dur, tl, at) {
-  const t = at ?? tl.duration();
-  tl.add(() => { ctx.controls.enabled = false; }, t);
-  tl.to(ctx.camera.position, { x: pos.x, y: pos.y, z: pos.z, duration: dur, ease: EASE }, t);
-  tl.to(ctx.controls.target, { x: target.x, y: target.y, z: target.z, duration: dur, ease: EASE }, t);
-  tl.add(() => { ctx.controls.enabled = true; }, t + dur);
+function lookCam(ctx, pos, target, dur, tl, at, { keepLocked = true } = {}) {
+  const t0 = at ?? tl.duration();
+  const proxy = { u: 0 };
+  const fromPos = new THREE.Vector3();
+  const fromLook = new THREE.Vector3();
+  const fromDir = new THREE.Vector3();
+  const toPos = pos.clone();
+  const toLook = target.clone();
+  const tmpLook = new THREE.Vector3();
+  const tmpOff = new THREE.Vector3();
+  const toDir = new THREE.Vector3();
+  const q0 = new THREE.Quaternion();
+  const q1 = new THREE.Quaternion();
+  const midDir = new THREE.Vector3(0, 0, 1);
+  const state = { fromR: 1 };
+
+  tl.add(() => { ctx.controls.enabled = false; }, t0);
+  tl.fromTo(proxy, { u: 0 }, {
+    u: 1,
+    duration: dur,
+    ease: EASE,
+    immediateRender: false,
+    onStart: () => {
+      fromPos.copy(ctx.camera.position);
+      fromLook.copy(ctx.controls.target);
+      tmpOff.copy(fromPos).sub(fromLook);
+      state.fromR = Math.max(tmpOff.length(), 1e-5);
+      fromDir.copy(tmpOff).multiplyScalar(1 / state.fromR);
+      ctx.controls.enabled = false;
+    },
+    onUpdate: () => {
+      const u = proxy.u;
+      tmpLook.copy(fromLook).lerp(toLook, u);
+      tmpOff.copy(toPos).sub(toLook);
+      const toR = Math.max(tmpOff.length(), 1e-5);
+      toDir.copy(tmpOff).multiplyScalar(1 / toR);
+      const dot = fromDir.dot(toDir);
+      if (dot > 0.9995) {
+        tmpOff.copy(fromDir);
+      } else if (dot < -0.999) {
+        const a = u < 0.5 ? fromDir : midDir;
+        const b = u < 0.5 ? midDir : toDir;
+        const s = u < 0.5 ? u * 2 : (u - 0.5) * 2;
+        q1.setFromUnitVectors(a, b);
+        q0.identity().slerp(q1, s);
+        tmpOff.copy(a).applyQuaternion(q0);
+      } else {
+        q1.setFromUnitVectors(fromDir, toDir);
+        q0.identity().slerp(q1, u);
+        tmpOff.copy(fromDir).applyQuaternion(q0);
+      }
+      const r = state.fromR + (toR - state.fromR) * u;
+      ctx.camera.position.copy(tmpLook).addScaledVector(tmpOff, r);
+      ctx.controls.target.copy(tmpLook);
+      ctx.camera.lookAt(tmpLook);
+      if (ctx.bokeh?.uniforms?.focus) ctx.bokeh.uniforms.focus.value = r;
+    },
+  }, t0);
+  tl.add(() => {
+    ctx.camera.position.copy(toPos);
+    ctx.controls.target.copy(toLook);
+    ctx.camera.lookAt(toLook);
+    if (ctx.bokeh?.uniforms?.focus) ctx.bokeh.uniforms.focus.value = toPos.distanceTo(toLook);
+    if (!keepLocked) ctx.controls.enabled = true;
+  }, t0 + dur);
 }
 
-function setDoF(ctx, focus, blur) {
+function setDoF(ctx, focus, blur, { aperture, duration = 1.05, tl, at } = {}) {
   if (!ctx.bokeh?.uniforms) return;
   const u = ctx.bokeh.uniforms;
-  if (u.focus) ctx.gsap.to(u.focus, { value: focus, duration: 1.05, ease: EASE });
-  if (u.maxblur) ctx.gsap.to(u.maxblur, { value: blur, duration: 1.05, ease: EASE });
+  const apply = (obj, value) => {
+    if (!obj || value == null) return;
+    const vars = { value, duration, ease: EASE };
+    if (tl) tl.to(obj, vars, at ?? tl.duration());
+    else ctx.gsap.to(obj, vars);
+  };
+  apply(u.focus, focus);
+  apply(u.maxblur, blur);
+  apply(u.aperture, aperture);
 }
 
 function createHinge(jaw) {
@@ -117,19 +209,69 @@ export function ensureOpenMouth(root, gsap, angle = OPEN_ANGLE, duration = 1.15)
   return tl.to(pivot.rotation, { x: angle, duration });
 }
 
-function surgicalFrame(root, molar, fdi, mode = "occlusal") {
-  const { upper, right } = fdiMeta(fdi);
-  const buccalX = right ? -1 : 1;
-  const occlusalY = upper ? 1 : -1;
-  const elev = THREE.MathUtils.degToRad(mode === "section" ? 32 : 40);
-  const yaw = THREE.MathUtils.degToRad(34);
-  const dir = new THREE.Vector3(
-    buccalX * Math.cos(elev) * 0.88,
-    occlusalY * Math.sin(elev),
-    Math.cos(elev) * Math.sin(yaw),
-  ).normalize();
-  const dist = mode === "section" ? 0.074 : 0.07;
-  return { pos: molar.clone().addScaledVector(dir, dist), target: molar.clone(), dist };
+function toothWorldPosition(toothMeshOrPos, fdi) {
+  const p = new THREE.Vector3();
+  if (toothMeshOrPos?.isVector3) return p.copy(toothMeshOrPos);
+  if (toothMeshOrPos && fdi != null) return fdiPoint(toothMeshOrPos, fdi);
+  if (toothMeshOrPos?.getWorldPosition) return toothMeshOrPos.getWorldPosition(p);
+  if (toothMeshOrPos?.x != null) return p.copy(toothMeshOrPos);
+  return p;
+}
+
+function actionDistance(actionType) {
+  if (actionType === "overview") return 0.22;
+  if (actionType === "section") return 0.08;
+  return 0.068;
+}
+
+export function getOptimalCameraPosition(toothMesh, archType, opts = {}) {
+  const fdi = opts.fdi ?? 16;
+  const upper = (archType || archTypeOf(fdi)) === "upper";
+  const actionType = opts.actionType || "occlusal";
+  const toothPosition = toothWorldPosition(toothMesh, fdi);
+  const offset = new THREE.Vector3();
+  if (upper) offset.set(0, -15, 25);
+  else offset.set(0, 15, 25);
+  if (actionType === "section") {
+    const buccal = fdiMeta(fdi).right ? -1 : 1;
+    offset.x = buccal * 5;
+    offset.y *= 0.88;
+  }
+  const dir = offset.normalize();
+  const dist = actionDistance(actionType);
+  return {
+    targetCameraPosition: toothPosition.clone().addScaledVector(dir, dist),
+    targetLookAt: toothPosition.clone(),
+    dist,
+    dir,
+    archType: upper ? "upper" : "lower",
+    toothPosition,
+  };
+}
+
+export function positionCameraForTooth(ctx, toothNumber, actionType = "occlusal", opts = {}) {
+  const fdi = Number(toothNumber) || 16;
+  const mesh = archMesh(ctx.root, fdi) || ctx.root;
+  const framed = getOptimalCameraPosition(mesh, archTypeOf(fdi), { fdi, actionType });
+  const tl = opts.tl || ctx.gsap.timeline();
+  const at = opts.at ?? (opts.tl ? tl.duration() : 0);
+  const dur = opts.duration ?? (actionType === "overview" ? 1.85 : 1.55);
+  lookCam(ctx, framed.targetCameraPosition, framed.targetLookAt, dur, tl, at, {
+    keepLocked: opts.keepLocked !== false,
+  });
+  const surgical = actionType !== "overview";
+  setDoF(ctx, null, surgical ? 0.014 : 0.003, {
+    aperture: surgical ? 0.00025 : 0.00012,
+    duration: dur,
+    tl,
+    at,
+  });
+  return { ...framed, fdi, tl };
+}
+
+function approachTooth(ctx, fdi, actionType, tl, at = 0) {
+  positionCameraForTooth(ctx, fdi, "overview", { tl, at, duration: 1.22, keepLocked: true });
+  return positionCameraForTooth(ctx, fdi, actionType, { tl, at: at + 1.22, duration: 1.55, keepLocked: true });
 }
 
 function openMouthOn(tl, root, at, duration) {
@@ -203,23 +345,132 @@ function makeLED(scale) {
   return g;
 }
 
-function makeFile(len, rad) {
-  const pts = [];
-  for (let i = 0; i <= 110; i++) {
-    const t = i / 110;
-    pts.push(new THREE.Vector3(
-      Math.cos(t * Math.PI * 14) * rad,
-      -t * len,
-      Math.sin(t * Math.PI * 14) * rad,
-    ));
+function steelMat() {
+  return new THREE.MeshStandardMaterial({
+    color: 0xb7c0c8,
+    metalness: 0.86,
+    roughness: 0.32,
+    envMapIntensity: 0.85,
+    emissive: 0x000000,
+    emissiveIntensity: 0,
+  });
+}
+
+function makeHedstromFile(len, rad) {
+  const steel = steelMat();
+  const g = new THREE.Group();
+  g.name = "prop_hedstrom_file";
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(rad * 0.2, rad * 0.4, len, 12), steel);
+  core.geometry.translate(0, len * 0.5, 0);
+  g.add(core);
+  const turns = 10;
+  for (let k = 0; k < 3; k++) {
+    const pts = [];
+    const phase = (k * Math.PI * 2) / 3;
+    for (let i = 0; i <= 90; i++) {
+      const t = i / 90;
+      const a = t * Math.PI * 2 * turns + phase;
+      const r = rad * (0.26 + 0.28 * t);
+      pts.push(new THREE.Vector3(Math.cos(a) * r, t * len, Math.sin(a) * r));
+    }
+    const blade = new THREE.Mesh(
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 90, rad * 0.09, 4, false),
+      steel,
+    );
+    g.add(blade);
   }
-  const mesh = new THREE.Mesh(
-    new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 110, rad * 0.5, 8, false),
-    new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.94, roughness: 0.16 }),
-  );
-  mesh.name = "prop_endo_file";
-  mesh.renderOrder = 4;
-  return mesh;
+  g.traverse((n) => { if (n.isMesh) n.renderOrder = 4; });
+  return g;
+}
+
+function makeHedstromRig(len, rad, airotorSrc) {
+  const rig = new THREE.Group();
+  rig.name = "prop_hedstrom_rig";
+  const file = makeHedstromFile(len, rad);
+  rig.add(file);
+  if (airotorSrc) {
+    const tool = airotorSrc.clone(true);
+    tool.name = "prop_airotor";
+    tool.traverse((n) => {
+      if (!n.isMesh) return;
+      n.castShadow = true;
+      n.renderOrder = 4;
+      const src = n.material;
+      const named = `${src?.name || ""} ${n.name || ""}`.toLowerCase();
+      const m = steelMat();
+      if (named.includes("tip")) {
+        m.color.set(0x9aa3ad);
+        m.metalness = 0.88;
+        m.roughness = 0.24;
+      } else {
+        m.color.set(0x3f4754);
+        m.metalness = 0.14;
+        m.roughness = 0.52;
+      }
+      n.material = Array.isArray(n.material) ? n.material.map(() => m.clone()) : m;
+    });
+    let maxDim = 0;
+    tool.updateMatrixWorld(true);
+    tool.traverse((n) => {
+      if (!n.isMesh || !n.geometry) return;
+      if (!n.geometry.boundingBox) n.geometry.computeBoundingBox();
+      const s0 = n.geometry.boundingBox.getSize(new THREE.Vector3());
+      maxDim = Math.max(maxDim, s0.x, s0.y, s0.z);
+    });
+    if (maxDim < 1e-4) {
+      console.warn("[viz] airotor bbox invalid — using fallback scale");
+      maxDim = 10;
+    }
+    tool.scale.setScalar(0.013 / maxDim);
+    tool.rotation.z = THREE.MathUtils.degToRad(-78);
+    tool.position.set(0, len, 0);
+    rig.add(tool);
+  } else {
+    console.warn("[viz] airotor mesh missing — Hedstrom file plays without handpiece");
+    const handle = new THREE.Mesh(
+      new THREE.CylinderGeometry(rad * 1.1, rad * 0.9, len * 0.35, 12),
+      steelMat(),
+    );
+    handle.position.y = len + len * 0.12;
+    handle.name = "prop_hedstrom_handle";
+    rig.add(handle);
+  }
+  return rig;
+}
+
+function burstDebris(ctx, origin, outDir, scale, gsap) {
+  const group = new THREE.Group();
+  group.name = "prop_hedstrom_debris";
+  const n = 12;
+  for (let i = 0; i < n; i++) {
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x7a3538,
+      roughness: 0.86,
+      metalness: 0,
+      transparent: true,
+      opacity: 0.92,
+      emissive: 0x000000,
+      emissiveIntensity: 0,
+    });
+    const bit = new THREE.Mesh(new THREE.TetrahedronGeometry(scale * (0.07 + Math.random() * 0.1), 0), mat);
+    bit.position.copy(origin);
+    bit.position.x += (Math.random() - 0.5) * scale * 0.45;
+    bit.position.z += (Math.random() - 0.5) * scale * 0.45;
+    bit.scale.setScalar(0.15);
+    group.add(bit);
+    const dest = origin.clone()
+      .addScaledVector(outDir, scale * (1.2 + Math.random() * 2.2))
+      .add(new THREE.Vector3((Math.random() - 0.5) * scale, 0, (Math.random() - 0.5) * scale));
+    gsap.to(bit.position, { x: dest.x, y: dest.y, z: dest.z, duration: 0.7, ease: "power2.out" });
+    gsap.to(bit.scale, { x: 1, y: 1, z: 1, duration: 0.18, ease: "power2.out" });
+    gsap.to(mat, { opacity: 0, duration: 0.75, ease: "power2.in", delay: 0.12 });
+  }
+  ctx.scene.add(group);
+  gsap.delayedCall(0.95, () => group.parent?.remove(group));
+}
+
+function makeFile(len, rad) {
+  return makeHedstromFile(len, rad);
 }
 
 function makeGutta(len, rad) {
@@ -402,14 +653,15 @@ function apexDirOf(molar, upper, canalLen) {
 
 export function playFissureSealant(ctx, fdi = "16") {
   const root = ctx.root;
-  const teeth = pick(root, "Tooth_Upper_Molar_16", "tooth_16", "TeethUpper_midres", "TeethUpper");
-  const gums = pick(root, "GumsUpper_midres", "GumsUpper");
-  if (!teeth) ctx.caption("Uyarı", "Üst çene diş mesh’i bulunamadı; sahne yine de oynar.");
+  const teeth = archMesh(root, fdi);
+  const gums = gumsMesh(root, fdi);
+  if (!teeth) ctx.caption("Uyarı", "Diş mesh’i bulunamadı; sahne yine de oynar.");
 
   const target = teeth || root;
   const { upper, right } = fdiMeta(fdi);
-  const molar = fdiPoint(target, fdi);
-  const frame = surgicalFrame(root, molar, fdi, "occlusal");
+  const framed = getOptimalCameraPosition(target, archTypeOf(fdi), { fdi, actionType: "occlusal" });
+  const molar = framed.toothPosition;
+  const frame = { pos: framed.targetCameraPosition, target: framed.targetLookAt, dist: framed.dist };
   const radius = toothRadius(target);
   const uniforms = bindUniforms(molar, radius, frame.pos.clone().sub(molar));
   const { dir: apexDir } = apexDirOf(molar, upper, radius * 3.2);
@@ -434,11 +686,9 @@ export function playFissureSealant(ctx, fdi = "16") {
   const step1 = () => {
     const at = tl.duration();
     tl.add(() => {
-      ctx.caption("Hamle 1 — Kadraj", `Diş ${fdi} okluzal makro, 40° çapraz bakış`);
-      setDoF(ctx, frame.dist, 0.005);
+      ctx.caption("Hamle 1 — Kadraj", archApproachLabel(fdi));
     }, at);
-    openMouthOn(tl, root, at, 1.05);
-    lookCam(ctx, frame.pos, molar, 1.7, tl, at + 0.12);
+    approachTooth(ctx, fdi, "occlusal", tl, at);
   };
 
   const step2 = () => {
@@ -491,53 +741,122 @@ export function playFissureSealant(ctx, fdi = "16") {
       ctx.restore();
       ensureOpenMouth(root, ctx.gsap, OPEN_ANGLE, 0);
       ctx.caption("Tamam", "Fissür örtücü dişle bütünleşti");
-      setDoF(ctx, frame.dist * 3.2, 0.002);
+      setDoF(ctx, frame.dist, 0.003, { aperture: 0.00012 });
+      ctx.controls.enabled = true;
     });
   };
 
   step1();
-  tl.add(() => {}, "+=0.05");
+  tl.add(() => {}, "+=0.32");
   step2();
-  tl.add(() => {}, "+=0.05");
+  tl.add(() => {}, "+=0.08");
   step3();
-  tl.add(() => {}, "+=0.05");
+  tl.add(() => {}, "+=0.08");
   step4();
   console.info("[viz] sealant frame", { molar: molar.toArray(), cam: frame.pos.toArray(), dist: frame.dist });
   requestAnimationFrame(() => tl.play(0));
   return tl;
 }
 
-export function playRootCanal(ctx, fdi = "16") {
+export function playHedstromCleaningAnimation(ctx, fdi = "16", opts = {}) {
+  const FILE_EASE = "power2.inOut";
   const root = ctx.root;
   const { upper } = fdiMeta(fdi);
-  const teeth = pick(
-    root,
-    upper ? "Tooth_Upper_Molar_16" : "Tooth_Lower_Molar_36",
-    upper ? "TeethUpper_midres" : "TeethLower_midres",
-    "TeethUpper_midres",
-    "TeethUpper",
-  );
-  const gums = pick(root, upper ? "GumsUpper_midres" : "GumsLower_midres", "GumsUpper", "GumsLower");
+  const teeth = archMesh(root, fdi);
+  if (!teeth) {
+    console.warn("[viz] Hedstrom: arch mesh not found for FDI", fdi);
+    ctx.caption("Uyarı", "Diş mesh’i bulunamadı; Hedstrom sahnesi yine de oynar.");
+  }
   const target = teeth || root;
-  if (!teeth) ctx.caption("Uyarı", "Kesit için diş mesh’i yok; shader yine de denenir.");
-
-  const molar = fdiPoint(target, fdi);
-  const frame = surgicalFrame(root, molar, fdi, "section");
+  const framed = getOptimalCameraPosition(target, archTypeOf(fdi), { fdi, actionType: "section" });
+  const molar = framed.toothPosition;
+  const frame = { pos: framed.targetCameraPosition, target: framed.targetLookAt, dist: framed.dist };
   const radius = toothRadius(target);
   const canalLen = radius * 3.4;
   const { orifice, apex, dir: apexDir } = apexDirOf(molar, upper, canalLen);
   const uniforms = bindUniforms(molar, radius * 1.05, frame.pos.clone().sub(molar));
 
-  ctx.restore();
-  clearProps(ctx);
-  ctx.renderer.localClippingEnabled = false;
-  attachDirectorMat(target, uniforms, "endo-section-v2");
+  if (!opts.skipRestore) {
+    ctx.restore();
+    clearProps(ctx);
+    ctx.renderer.localClippingEnabled = false;
+    attachDirectorMat(target, uniforms, "endo-hedstrom-section-v1");
+  }
 
-  const file = makeFile(canalLen * 1.15, radius * 0.07);
-  file.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), apexDir);
-  file.position.copy(orifice).addScaledVector(apexDir, -canalLen * 1.2);
-  file.visible = false;
-  ctx.scene.add(file);
+  const outDir = apexDir.clone().negate();
+  const airotorSrc = ctx.airotor?.scene || ctx.airotor;
+  if (!airotorSrc) console.warn("[viz] airotor.glb not loaded — Hedstrom plays without handpiece");
+  const rig = makeHedstromRig(canalLen * 1.08, radius * 0.085, airotorSrc);
+  rig.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), outDir);
+  const parked = orifice.clone().addScaledVector(outDir, canalLen * 1.35);
+  const working = apex.clone().addScaledVector(outDir, radius * 0.08);
+  rig.position.copy(parked);
+  rig.visible = false;
+  ctx.scene.add(rig);
+
+  const tl = opts.tl || ctx.gsap.timeline({ paused: true, defaults: { ease: FILE_EASE } });
+
+  const step1 = () => {
+    const at = tl.duration();
+    tl.add(() => {
+      ctx.caption("Hamle 1 — Kesit", `${archApproachLabel(fdi)} · mine / dentin / pulpa`);
+    }, at);
+    approachTooth(ctx, fdi, "section", tl, at);
+    tl.to(uniforms.uSection, { value: 1, duration: 0.7, ease: FILE_EASE }, at + 2.15);
+    tl.to(uniforms.uPulse, { value: 1, duration: 0.85, ease: "sine.inOut" }, at + 2.35);
+  };
+
+  const step2 = () => {
+    const at = tl.duration();
+    tl.add(() => {
+      ctx.caption("Hamle 2 — Hedstrom girişi", "Spiral eğe kanal ekseninde apekse iniyor");
+      rig.visible = true;
+    }, at);
+    tl.to(rig.position, { x: working.x, y: working.y, z: working.z, duration: 1.2, ease: FILE_EASE }, at);
+  };
+
+  const step3 = () => {
+    const at = tl.duration();
+    tl.add(() => ctx.caption("Hamle 3 — Pull-stroke", "Doğrusal çekme vuruşu · pulpa ve debris temizleniyor"), at);
+    const strokes = 5;
+    for (let i = 0; i < strokes; i++) {
+      const pushTo = orifice.clone().lerp(working, 0.94 - i * 0.05);
+      const pullTo = orifice.clone().lerp(working, 0.4);
+      tl.to(rig.position, { x: pushTo.x, y: pushTo.y, z: pushTo.z, duration: 0.22, ease: "power2.in" });
+      tl.to(rig.position, {
+        x: pullTo.x, y: pullTo.y, z: pullTo.z, duration: 0.42, ease: "power2.out",
+        onStart: () => burstDebris(ctx, rig.position.clone(), outDir, radius, ctx.gsap),
+      });
+      tl.to(uniforms.uClean, { value: (i + 1) / strokes, duration: 0.42, ease: FILE_EASE }, "<");
+      tl.to(uniforms.uPulse, { value: 1 - (i + 1) / strokes, duration: 0.42, ease: FILE_EASE }, "<");
+    }
+  };
+
+  const step4 = () => {
+    const at = tl.duration();
+    tl.add(() => ctx.caption("Hamle 4 — Çıkış", "Hedstrom geri çekildi · steril kanal obturasyona hazır"), at);
+    tl.to(rig.position, { x: working.x, y: working.y, z: working.z, duration: 0.28, ease: "power2.in" }, at);
+    tl.to(rig.position, { x: parked.x, y: parked.y, z: parked.z, duration: 0.9, ease: FILE_EASE });
+    tl.add(() => { rig.visible = false; });
+  };
+
+  step1();
+  tl.add(() => {}, "+=0.28");
+  step2();
+  tl.add(() => {}, "+=0.12");
+  step3();
+  tl.add(() => {}, "+=0.12");
+  step4();
+
+  if (opts.autoplay !== false && !opts.tl) requestAnimationFrame(() => tl.play(0));
+  console.info("[viz] hedstrom frame", { molar: molar.toArray(), cam: frame.pos.toArray(), dist: frame.dist, upper });
+  return { tl, uniforms, target, molar, frame, orifice, apex, apexDir, radius, canalLen, rig };
+}
+
+export function playRootCanal(ctx, fdi = "16") {
+  const root = ctx.root;
+  const { uniforms, target, frame, orifice, apex, apexDir, radius, canalLen, tl } =
+    playHedstromCleaningAnimation(ctx, fdi, { autoplay: false });
 
   const gutta = makeGutta(canalLen, radius * 0.16);
   gutta.position.copy(apex);
@@ -551,79 +870,38 @@ export function playRootCanal(ctx, fdi = "16") {
   cap.visible = false;
   ctx.scene.add(cap);
 
-  const tl = ctx.gsap.timeline({ paused: true, defaults: { ease: EASE } });
+  tl.add(() => {}, "+=0.18");
+  const at = tl.duration();
+  tl.add(() => {
+    ctx.caption("Hamle 5 — Guta-perka", "Obtürasyon, kor örtü ve doğal forma dönüş");
+    cap.visible = true;
+  }, at);
+  tl.to(gutta.scale, { y: 1, duration: 1.2, ease: "power2.out" }, at);
+  tl.to(gutta.material, { opacity: 0.96, duration: 0.85 }, at);
+  tl.to(gutta.material.color, { r: 0.98, g: 0.74, b: 0.62, duration: 0.7 }, at + 0.35);
+  tl.to(cap.material, { opacity: 1, duration: 0.55 }, at + 0.85);
+  tl.to(uniforms.uSection, { value: 0, duration: 0.85 }, at + 1.15);
+  tl.add(() => {
+    detachDirectorMat(target);
+    ctx.restore();
+    ensureOpenMouth(root, ctx.gsap, OPEN_ANGLE, 0);
+  });
+  tl.add(() => {
+    gutta.visible = false;
+    cap.visible = false;
+    ctx.caption("Tamam", "Kanal mühürlendi");
+    setDoF(ctx, frame.dist, 0.003, { aperture: 0.00012 });
+    ctx.controls.enabled = true;
+  });
 
-  const step1 = () => {
-    const at = tl.duration();
-    tl.add(() => {
-      ctx.caption("Hamle 1 — Kesit", `Diş ${fdi} dikey kesit: mine / dentin / pulpa`);
-      setDoF(ctx, frame.dist, 0.005);
-    }, at);
-    openMouthOn(tl, root, at, 1.05);
-    lookCam(ctx, frame.pos, molar, 1.65, tl, at + 0.12);
-    tl.to(uniforms.uSection, { value: 1, duration: 0.7 }, at + 0.45);
-  };
-
-  const step2 = () => {
-    const at = tl.duration();
-    tl.add(() => ctx.caption("Hamle 2 — Enfeksiyon", "Pulpa odasında hafif inflamasyon vurgusu"), at);
-    tl.to(uniforms.uPulse, { value: 1, duration: 0.55, yoyo: true, repeat: 3, ease: "sine.inOut" }, at);
-  };
-
-  const step3 = () => {
-    const at = tl.duration();
-    const start = file.position.clone();
-    const depth = apex.clone().addScaledVector(apexDir, -radius * 0.12);
-    tl.add(() => {
-      ctx.caption("Hamle 3 — Mekanik temizlik", "Endodontik eğe kanalda dönerek iniyor");
-      file.visible = true;
-    }, at);
-    tl.to(file.position, { x: orifice.x, y: orifice.y, z: orifice.z, duration: 0.55 }, at);
-    tl.to(file.rotation, { y: Math.PI * 10, duration: 2.05, ease: "none" }, at);
-    tl.to(file.position, { x: depth.x, y: depth.y, z: depth.z, duration: 1.7, ease: "power1.inOut" }, at + 0.15);
-    tl.to(uniforms.uClean, { value: 1, duration: 1.35 }, at + 0.35);
-    tl.to(uniforms.uPulse, { value: 0, duration: 1.0 }, at + 0.35);
-    tl.to(file.position, { x: start.x, y: start.y, z: start.z, duration: 0.7, ease: "power2.in" });
-    tl.add(() => { file.visible = false; });
-  };
-
-  const step4 = () => {
-    const at = tl.duration();
-    tl.add(() => {
-      ctx.caption("Hamle 4 — Guta-perka", "Obtürasyon, kor örtü ve doğal forma dönüş");
-      cap.visible = true;
-    }, at);
-    tl.to(gutta.scale, { y: 1, duration: 1.2, ease: "power2.out" }, at);
-    tl.to(gutta.material, { opacity: 0.96, duration: 0.85 }, at);
-    tl.to(gutta.material.color, { r: 0.98, g: 0.74, b: 0.62, duration: 0.7 }, at + 0.35);
-    tl.to(cap.material, { opacity: 1, duration: 0.55 }, at + 0.85);
-    tl.to(uniforms.uSection, { value: 0, duration: 0.85 }, at + 1.15);
-    tl.add(() => {
-      detachDirectorMat(target);
-      ctx.restore();
-      ensureOpenMouth(root, ctx.gsap, OPEN_ANGLE, 0);
-    });
-    tl.add(() => {
-      gutta.visible = false;
-      cap.visible = false;
-      ctx.caption("Tamam", "Kanal mühürlendi");
-      setDoF(ctx, frame.dist * 3.4, 0.002);
-    });
-  };
-
-  step1();
-  tl.add(() => {}, "+=0.05");
-  step2();
-  tl.add(() => {}, "+=0.05");
-  step3();
-  tl.add(() => {}, "+=0.05");
-  step4();
-  console.info("[viz] endo frame", { molar: molar.toArray(), cam: frame.pos.toArray(), dist: frame.dist });
   requestAnimationFrame(() => tl.play(0));
   return tl;
 }
 
+export { lookCam as flyCamera };
+
 export const Cinematics = {
   fissure_sealant: playFissureSealant,
   root_canal: playRootCanal,
+  hedstrom_cleaning: (ctx, fdi) => playHedstromCleaningAnimation(ctx, fdi).tl,
 };

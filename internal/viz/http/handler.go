@@ -45,6 +45,7 @@ func (h *Handler) Register(r chi.Router) {
 	r.Get("/viz/player.js", h.playerJS)
 	r.Get("/viz/cinematics.js", h.cinematicsJS)
 	r.Get("/viz/mouth.glb", h.mouth)
+	r.Get("/viz/airotor.glb", h.airotor)
 
 	r.Group(func(r chi.Router) {
 		if h.auth != nil {
@@ -91,6 +92,17 @@ func (h *Handler) playerJS(w http.ResponseWriter, _ *http.Request) {
 
 func (h *Handler) cinematicsJS(w http.ResponseWriter, _ *http.Request) {
 	servePlayerFile(w, "cinematics.js", "text/javascript; charset=utf-8", player.Cinematics)
+}
+
+func (h *Handler) airotor(w http.ResponseWriter, r *http.Request) {
+	p := filepath.Join("internal", "viz", "player", "static", "airotor.glb")
+	if _, err := os.Stat(p); err != nil {
+		httpx.WriteError(w, errx.New("model_missing", "airotor.glb not found", errx.ErrNotFound))
+		return
+	}
+	w.Header().Set("Content-Type", "model/gltf-binary")
+	w.Header().Set("Cache-Control", "no-store")
+	http.ServeFile(w, r, p)
 }
 
 func (h *Handler) mouth(w http.ResponseWriter, r *http.Request) {

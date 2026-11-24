@@ -120,7 +120,7 @@ func TestPlanPlaylistRequiresAuth(t *testing.T) {
 
 func TestPlayerEmbedCoversPrimitives(t *testing.T) {
 	js := string(player.Cinematics)
-	for _, needle := range []string{"step1", "step2", "step3", "step4", "playFissureSealant", "playRootCanal", "getObjectByName", "jawLower_midres"} {
+	for _, needle := range []string{"step1", "step2", "step3", "step4", "playFissureSealant", "playRootCanal", "playHedstromCleaningAnimation", "getObjectByName", "jawLower_midres"} {
 		if !strings.Contains(js, needle) {
 			t.Errorf("cinematics.js missing %s", needle)
 		}

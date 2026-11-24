@@ -8,7 +8,16 @@ import { BokehPass } from "three/addons/postprocessing/BokehPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import gsap from "gsap";
-import { Cinematics, playFissureSealant, playRootCanal, ensureOpenMouth } from "./cinematics.js?v=32";
+import {
+  Cinematics,
+  playFissureSealant,
+  playRootCanal,
+  ensureOpenMouth,
+  positionCameraForTooth,
+  flyCamera,
+  archTypeOf,
+  archApproachLabel,
+} from "./cinematics.js?v=39";
 
 const MODEL_URL = new URL("./mouth.glb", window.location.href).toString();
 
@@ -206,6 +215,7 @@ class Director {
     this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.16, 0.42, 0.86));
     this.composer.addPass(new OutputPass());
     this.root = null;
+    this.airotor = null;
     this.playlist = { clips: [] };
     this.clipIndex = 0;
     this.activeTL = null;
@@ -244,6 +254,7 @@ class Director {
       renderer: this.renderer,
       bokeh: this.bokeh,
       root: this.root,
+      airotor: this.airotor,
       caption: (t, b) => this.caption(t, b),
       restore: () => {
         restoreMats(this.root);
@@ -296,6 +307,13 @@ class Director {
       });
     });
     inspectModel(this.root);
+    try {
+      const airotorURL = new URL("./airotor.glb", window.location.href).toString();
+      this.airotor = await new GLTFLoader().loadAsync(airotorURL);
+    } catch (err) {
+      console.warn("[viz] airotor.glb missing — Hedstrom plays without handpiece", err);
+      this.airotor = null;
+    }
     ensureOpenMouth(this.root, gsap, 0.12, 0);
     window.__director = this;
     const focus = this.root.getObjectByName("TeethTongueSet_midres")
@@ -315,6 +333,13 @@ class Director {
     this.camera.position.set(c.x + dist * 0.42, c.y + dist * 0.18, c.z + dist * 0.9);
     this.controls.target.copy(c);
     this.camera.lookAt(c);
+    this.homeCam = {
+      pos: this.camera.position.clone(),
+      target: c.clone(),
+    };
+    if (this.bokeh?.uniforms?.focus) {
+      this.bokeh.uniforms.focus.value = this.camera.position.distanceTo(c);
+    }
     this.caption("Hazır", "Blend sahnesi: ışık, kamera, tükürük ve midres mesh.");
   }
 
@@ -323,6 +348,7 @@ class Director {
     this.activeTL = null;
     restoreMats(this.root);
     this.renderer.localClippingEnabled = false;
+    this.controls.enabled = true;
     const drop = [];
     this.scene.traverse((o) => { if (o.name?.startsWith("prop_")) drop.push(o); });
     drop.forEach((o) => o.parent?.remove(o));
@@ -347,25 +373,83 @@ class Director {
   playPlan() {
     if (!this.playlist.clips.length) return;
     this.kill();
-    const run = (i) => {
-      if (i >= this.playlist.clips.length) {
-        this.caption("Bitti", "İki sinematik tamamlandı.");
-        return;
-      }
+    const first = this.playlist.clips[0];
+    const firstTooth = (first?.teeth && first.teeth[0]) || "16";
+    const intro = gsap.timeline({
+      onComplete: () => this._playPlanFrom(0),
+    });
+    this.activeTL = intro;
+    this.caption("Plan", archApproachLabel(firstTooth));
+    positionCameraForTooth(this.ctx(), firstTooth, "overview", {
+      tl: intro,
+      at: 0,
+      duration: 2.05,
+      keepLocked: true,
+    });
+    intro.to({}, { duration: 0.28 });
+  }
+
+  _playPlanFrom(i) {
+    if (i >= this.playlist.clips.length) {
+      this._finishPlan();
+      return;
+    }
+    const clip = this.playlist.clips[i];
+    const tooth = (clip.teeth && clip.teeth[0]) || "16";
+    const prev = i > 0 ? this.playlist.clips[i - 1] : null;
+    const prevArch = prev ? archTypeOf((prev.teeth && prev.teeth[0]) || "16") : null;
+    const nextArch = archTypeOf(tooth);
+    const startClip = () => {
       const tl = this.playClip(i);
       if (!tl) {
-        run(i + 1);
+        this._playPlanFrom(i + 1);
         return;
       }
-      tl.eventCallback("onComplete", () => run(i + 1));
+      tl.eventCallback("onComplete", () => this._playPlanFrom(i + 1));
     };
-    run(0);
+    if (prev && prevArch !== nextArch) {
+      const bridge = gsap.timeline({ onComplete: startClip });
+      this.activeTL = bridge;
+      this.caption("Kemer değişimi", archApproachLabel(tooth));
+      positionCameraForTooth(this.ctx(), tooth, "overview", {
+        tl: bridge,
+        at: 0,
+        duration: 1.65,
+        keepLocked: true,
+      });
+      return;
+    }
+    startClip();
+  }
+
+  _finishPlan() {
+    const home = this.homeCam;
+    if (!home) {
+      this.caption("Bitti", "Plan sinematiği tamamlandı.");
+      this.controls.enabled = true;
+      return;
+    }
+    const outro = gsap.timeline({
+      onComplete: () => {
+        this.caption("Bitti", "Plan sinematiği tamamlandı.");
+        this.controls.enabled = true;
+      },
+    });
+    this.activeTL = outro;
+    const ctx = this.ctx();
+    flyCamera(ctx, home.pos, home.target, 1.75, outro, 0, { keepLocked: false });
+    if (this.bokeh?.uniforms?.maxblur) {
+      outro.to(this.bokeh.uniforms.maxblur, { value: 0.002, duration: 1.1 }, 0);
+    }
+    if (this.bokeh?.uniforms?.aperture) {
+      outro.to(this.bokeh.uniforms.aperture, { value: 0.00012, duration: 1.1 }, 0);
+    }
   }
 }
 
 async function loadPlaylist() {
   const q = new URLSearchParams(location.search);
-  const items = q.get("items") || "fissure_sealant:16,root_canal:16";
+  const items = q.get("items") || "fissure_sealant:16,root_canal:36";
   const demo = new URLSearchParams({
     code: q.get("code") || "",
     teeth: q.get("teeth") || "",
@@ -379,7 +463,7 @@ async function loadPlaylist() {
   if (!pl.clips.length) {
     pl.clips = [
       { code: "fissure_sealant", teeth: ["16"], title: "Fissür Örtücü", moves: [] },
-      { code: "root_canal", teeth: ["16"], title: "Kanal tedavisi", moves: [] },
+      { code: "root_canal", teeth: ["36"], title: "Kanal tedavisi", moves: [] },
     ];
   }
   return pl;
@@ -407,7 +491,7 @@ Promise.all([director.loadModel(), loadPlaylist()])
       o.textContent = `${c.title} (${(c.teeth || ["16"]).join(",")})`;
       select.appendChild(o);
     });
-    director.caption("Hazır", "Fissür örtücü · Kanal tedavisi. Planı oynat.");
+    director.caption("Hazır", "Maksilla 16 alttan · Mandibula 36 üstten. Planı oynat.");
     if (new URLSearchParams(location.search).get("autoplay") === "1") director.playPlan();
   })
   .catch((err) => director.caption("Yüklenemedi", err.message));
