@@ -31,7 +31,7 @@ func New() *Store {
 		BillingInterval: domain.IntervalMonth,
 		PriceCents:      7500,
 		Currency:        "USD",
-		PlanQuota:       30,
+		PlanQuota:       40,
 		IsActive:        true,
 		CreatedAt:       now,
 	}
@@ -42,7 +42,7 @@ func New() *Store {
 		BillingInterval: domain.IntervalYear,
 		PriceCents:      75000,
 		Currency:        "USD",
-		PlanQuota:       30,
+		PlanQuota:       40,
 		IsActive:        true,
 		CreatedAt:       now,
 	}
@@ -53,7 +53,7 @@ func New() *Store {
 		BillingInterval:     domain.IntervalMonth,
 		PriceCents:          10000,
 		Currency:            "USD",
-		PlanQuota:           60,
+		PlanQuota:           80,
 		Has3DViz:            true,
 		HasPatientPortal:    true,
 		HasTelemetry:        true,
@@ -68,7 +68,7 @@ func New() *Store {
 		BillingInterval:      domain.IntervalYear,
 		PriceCents:           100000,
 		Currency:             "USD",
-		PlanQuota:            60,
+		PlanQuota:            80,
 		Has3DViz:             true,
 		HasPatientPortal:     true,
 		HasTelemetry:         true,
@@ -164,4 +164,3 @@ func (s *Store) ListDemoRequests(ctx context.Context) ([]domain.DemoRequest, err
 	copy(out, s.demoRequests)
 	return out, nil
 }
-

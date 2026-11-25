@@ -44,8 +44,8 @@ func TestSubscriptionService_FullLifecycle(t *testing.T) {
 	if sub.Tier != "classic" {
 		t.Fatalf("expected tier classic, got %s", sub.Tier)
 	}
-	if sub.PlanQuota != 30 {
-		t.Fatalf("expected plan quota 30, got %d", sub.PlanQuota)
+	if sub.PlanQuota != 40 {
+		t.Fatalf("expected plan quota 40, got %d", sub.PlanQuota)
 	}
 
 	// 4. Classic tier can create classic plan, but CANNOT create ultimate plan
@@ -68,8 +68,8 @@ func TestSubscriptionService_FullLifecycle(t *testing.T) {
 	if upgraded.BillingInterval != "year" {
 		t.Fatalf("expected interval year, got %s", upgraded.BillingInterval)
 	}
-	if upgraded.PlanQuota != 60 {
-		t.Fatalf("expected professional monthly allowance 60, got %d", upgraded.PlanQuota)
+	if upgraded.PlanQuota != 80 {
+		t.Fatalf("expected professional monthly allowance 80, got %d", upgraded.PlanQuota)
 	}
 
 	// 6. Now Ultimate plan is permitted
@@ -125,7 +125,7 @@ func TestSubscriptionService_MonthlyAllowanceResets(t *testing.T) {
 	if _, err := svc.Subscribe(ctx, clinicID, "classic_yearly"); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 40; i++ {
 		if err := svc.RecordPlanUsage(ctx, clinicID); err != nil {
 			t.Fatal(err)
 		}
@@ -150,7 +150,7 @@ func TestSubscriptionService_MonthlyAllowanceResets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cur.PlansCreatedCount != 0 || cur.QuotaRemaining != 30 {
+	if cur.PlansCreatedCount != 0 || cur.QuotaRemaining != 40 {
 		t.Fatalf("want reset counter, got used=%d remaining=%d", cur.PlansCreatedCount, cur.QuotaRemaining)
 	}
 	if err := svc.CanCreatePlan(ctx, clinicID, "classic"); err != nil {
