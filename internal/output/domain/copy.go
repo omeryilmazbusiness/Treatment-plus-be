@@ -50,7 +50,11 @@ type Copy struct {
 	Intact          string
 	Missing         string
 	Filled          string
+	Caries          string
+	RootCanal       string
+	Implant         string
 	Crown           string
+	Bridge          string
 	Planned         string
 }
 
@@ -104,7 +108,11 @@ func CopyFor(locale string) Copy {
 			Intact:          "Intact",
 			Missing:         "Missing",
 			Filled:          "Filled",
+			Caries:          "Caries",
+			RootCanal:       "Root Canal",
+			Implant:         "Implant",
 			Crown:           "Crown",
+			Bridge:          "Bridge",
 			Planned:         "Planned",
 		}
 	}
@@ -156,7 +164,11 @@ func CopyFor(locale string) Copy {
 		Intact:          "Sağlam",
 		Missing:         "Eksik",
 		Filled:          "Dolgulu",
+		Caries:          "Çürük",
+		RootCanal:       "Kanal Tedavili",
+		Implant:         "İmplant",
 		Crown:           "Kuron",
+		Bridge:          "Köprü",
 		Planned:         "Planlandı",
 	}
 }

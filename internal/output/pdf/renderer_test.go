@@ -136,3 +136,32 @@ func TestClassicRenderer_FallbacksWhenFieldsEmpty(t *testing.T) {
 		t.Fatalf("generated PDF too small: %d bytes", len(raw))
 	}
 }
+
+func TestClassicRenderer_AllToothConditionsAndVisitOdontogram(t *testing.T) {
+	snap := sampleSnapshot()
+	snap.Situation.ToothFindings = []domain.ToothFinding{
+		{Tooth: "18", Status: "missing"},
+		{Tooth: "16", Status: "caries", Note: "Derin çürük"},
+		{Tooth: "14", Status: "root_canal"},
+		{Tooth: "12", Status: "implant"},
+		{Tooth: "11", Status: "crown"},
+		{Tooth: "21", Status: "bridge"},
+		{Tooth: "24", Status: "filled"},
+		{Tooth: "36", Status: "intact"},
+	}
+	snap.Visits = []domain.Visit{
+		{Title: "1. Seans", ChartTeeth: []string{"16", "14", "12"}},
+		{Title: "2. Seans", ChartTeeth: []string{"11", "21"}},
+	}
+
+	raw, pages, err := pdf.NewRenderer().Render(context.Background(), snap, app.Images{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pages != 24 {
+		t.Fatalf("expected 24 pages, got %d", pages)
+	}
+	if !bytes.HasPrefix(raw, []byte("%PDF")) {
+		t.Fatalf("invalid PDF header")
+	}
+}

@@ -23,21 +23,38 @@ func (d *doc) drawArch(x, y, cell float64, teeth []string, find map[string]strin
 	for i, t := range teeth {
 		cx := x + float64(i)*cell
 		fill := domain.RGB{R: 255, G: 255, B: 255}
+		_, marked := mark[t]
 		switch find[t] {
 		case "missing":
 			fill = domain.RGB{R: 220, G: 80, B: 80}
 		case "filled":
 			fill = domain.RGB{R: 90, G: 160, B: 220}
+		case "caries":
+			fill = domain.RGB{R: 217, G: 119, B: 6}
+		case "root_canal":
+			fill = domain.RGB{R: 168, G: 85, B: 247}
+		case "implant":
+			fill = domain.RGB{R: 20, G: 184, B: 166}
 		case "crown":
 			fill = d.theme.Accent
+		case "bridge":
+			fill = domain.RGB{R: 99, G: 102, B: 241}
 		case "intact":
 			fill = domain.RGB{R: 180, G: 210, B: 170}
+		default:
+			if find[t] == "" {
+				fill = domain.RGB{R: 180, G: 210, B: 170}
+			}
 		}
-		if _, ok := mark[t]; ok && find[t] == "" {
-			fill = d.theme.Soft
+		if marked {
+			fill = d.theme.Accent
 		}
 		d.setFill(fill)
-		d.setDraw(d.theme.Primary)
+		if marked {
+			d.setDraw(d.theme.Accent)
+		} else {
+			d.setDraw(d.theme.Primary)
+		}
 		d.pdf.Rect(cx, y, cell-1.2, 12, "FD")
 		d.font("", 6)
 		d.setText(d.theme.Ink)

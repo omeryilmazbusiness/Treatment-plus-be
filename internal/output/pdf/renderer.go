@@ -299,56 +299,24 @@ func (d *doc) toothFindingAndStatus(tooth string) (label string, note string, st
 	rawStatus := strings.ToLower(strings.TrimSpace(f.Status))
 	note = strings.TrimSpace(f.Note)
 
-	// Look up if this tooth is included in any planned item
-	var plannedName string
-	for _, it := range d.snap.Items {
-		match := false
-		if it.ToothNumber != nil && *it.ToothNumber == tooth {
-			match = true
-		} else {
-			for _, tStr := range it.Teeth {
-				for _, t := range strings.FieldsFunc(tStr, func(r rune) bool {
-					return r == ',' || r == ';' || r == ' ' || r == '\t'
-				}) {
-					if strings.TrimSpace(t) == tooth {
-						match = true
-						break
-					}
-				}
-				if match {
-					break
-				}
-			}
-		}
-		if match {
-			plannedName = it.TreatmentName
-			break
-		}
-	}
-
 	switch rawStatus {
 	case "missing":
 		return d.copy.Missing, note, domain.RGB{R: 220, G: 80, B: 80}
 	case "filled":
 		return d.copy.Filled, note, domain.RGB{R: 90, G: 160, B: 220}
+	case "caries":
+		return d.copy.Caries, note, domain.RGB{R: 217, G: 119, B: 6}
+	case "root_canal":
+		return d.copy.RootCanal, note, domain.RGB{R: 168, G: 85, B: 247}
+	case "implant":
+		return d.copy.Implant, note, domain.RGB{R: 20, G: 184, B: 166}
 	case "crown":
 		return d.copy.Crown, note, d.theme.Primary
+	case "bridge":
+		return d.copy.Bridge, note, domain.RGB{R: 99, G: 102, B: 241}
 	case "intact":
-		if plannedName != "" {
-			if note == "" {
-				note = plannedName
-			}
-			return d.copy.Planned, note, d.theme.Accent
-		}
 		return d.copy.Intact, note, domain.RGB{R: 180, G: 210, B: 170}
 	default:
-		// If status is empty, infer from items
-		if plannedName != "" {
-			if note == "" {
-				note = plannedName
-			}
-			return d.copy.Planned, note, d.theme.Accent
-		}
 		return d.copy.Intact, note, domain.RGB{R: 180, G: 210, B: 170}
 	}
 }
@@ -413,7 +381,6 @@ func (d *doc) pageVisit(index int) {
 		title = visit.PhaseLabel + " · " + title
 	}
 	d.headerBar(title)
-	d.odontogram(16, 38, 178, visit.ChartTeeth, nil)
 
 	var items []domain.Item
 	if index == 0 {
@@ -425,6 +392,30 @@ func (d *doc) pageVisit(index int) {
 		// On the second visit page, include Visit 1 items AND any subsequent/unassigned items
 		items = d.itemsForSecondVisit()
 	}
+
+	// Highlight teeth treated in this visit on top of the doctor's diagnosis findings
+	visitTeeth := append([]string(nil), visit.ChartTeeth...)
+	for _, it := range items {
+		if it.ToothNumber != nil {
+			for _, t := range strings.FieldsFunc(*it.ToothNumber, func(r rune) bool {
+				return r == ',' || r == ';' || r == ' ' || r == '\t'
+			}) {
+				if trimmed := strings.TrimSpace(t); trimmed != "" {
+					visitTeeth = append(visitTeeth, trimmed)
+				}
+			}
+		}
+		for _, tStr := range it.Teeth {
+			for _, t := range strings.FieldsFunc(tStr, func(r rune) bool {
+				return r == ',' || r == ';' || r == ' ' || r == '\t'
+			}) {
+				if trimmed := strings.TrimSpace(t); trimmed != "" {
+					visitTeeth = append(visitTeeth, trimmed)
+				}
+			}
+		}
+	}
+	d.odontogram(16, 38, 178, visitTeeth, d.snap.Situation.ToothFindings)
 
 	d.itemTable(16, 82, items, index, isFinal)
 
