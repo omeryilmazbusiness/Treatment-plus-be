@@ -223,8 +223,12 @@ func (h *Handler) downloadPublicPDF(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	disposition := "inline"
+	if r.URL.Query().Get("download") == "1" || r.URL.Query().Get("attachment") == "1" {
+		disposition = "attachment"
+	}
 	w.Header().Set("Content-Type", "application/pdf")
-	w.Header().Set("Content-Disposition", "attachment; filename=\"treatment-plan.pdf\"")
+	w.Header().Set("Content-Disposition", disposition+`; filename="treatment-plan.pdf"`)
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(pdfBytes)

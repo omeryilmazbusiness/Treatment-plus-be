@@ -65,6 +65,8 @@ type ClinicSettingsDTO struct {
 	Lab         ClinicLabDTO    `json:"lab"`
 	Awards      ClinicAwardsDTO `json:"awards"`
 	Hotel       ClinicHotelDTO  `json:"hotel"`
+	TemplateID  string          `json:"template_id"`
+	ShowMotifs  bool            `json:"show_motifs"`
 }
 
 type SettingsReader interface {

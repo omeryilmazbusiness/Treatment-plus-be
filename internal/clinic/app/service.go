@@ -67,6 +67,8 @@ type UpdateSettingsInput struct {
 	Reviews     *[]domain.Review
 	BeforeAfter *[]domain.BeforeAfterCase
 	CTA         *domain.CTAConfig
+	TemplateID  *string
+	ShowMotifs  *bool
 }
 
 func (s *Service) UpdateSettings(ctx context.Context, workspaceID id.ID, input UpdateSettingsInput) (domain.Settings, error) {
@@ -103,6 +105,16 @@ func (s *Service) UpdateSettings(ctx context.Context, workspaceID id.ID, input U
 			return domain.Settings{}, err
 		}
 		current.Palette = pal
+	}
+	if input.TemplateID != nil {
+		tpl, err := domain.ParseTemplateID(*input.TemplateID)
+		if err != nil {
+			return domain.Settings{}, err
+		}
+		current.TemplateID = tpl
+	}
+	if input.ShowMotifs != nil {
+		current.ShowMotifs = *input.ShowMotifs
 	}
 
 	set := func(dst *string, src *string) {

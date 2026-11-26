@@ -66,8 +66,12 @@ func (h *Handler) download(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, err)
 		return
 	}
+	disposition := "inline"
+	if r.URL.Query().Get("download") == "1" || r.URL.Query().Get("attachment") == "1" {
+		disposition = "attachment"
+	}
 	w.Header().Set("Content-Type", doc.ContentType)
-	w.Header().Set("Content-Disposition", `attachment; filename="treatment-plan.pdf"`)
+	w.Header().Set("Content-Disposition", disposition+`; filename="treatment-plan.pdf"`)
 	w.Header().Set("Content-Length", strconv.Itoa(len(doc.Bytes)))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(doc.Bytes)

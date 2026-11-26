@@ -74,6 +74,8 @@ type settingsResponse struct {
 	Reviews     []domain.Review          `json:"reviews"`
 	BeforeAfter []domain.BeforeAfterCase `json:"before_after"`
 	CTA         domain.CTAConfig         `json:"cta"`
+	TemplateID  string                   `json:"template_id"`
+	ShowMotifs  bool                     `json:"show_motifs"`
 }
 
 type patchSettingsRequest struct {
@@ -107,6 +109,8 @@ type patchSettingsRequest struct {
 	Reviews     *[]domain.Review          `json:"reviews"`
 	BeforeAfter *[]domain.BeforeAfterCase `json:"before_after"`
 	CTA         *domain.CTAConfig         `json:"cta"`
+	TemplateID  *string                   `json:"template_id"`
+	ShowMotifs  *bool                     `json:"show_motifs"`
 }
 
 func (h *Handler) getWorkspace(w http.ResponseWriter, r *http.Request) {
@@ -193,6 +197,8 @@ func (h *Handler) patchSettings(w http.ResponseWriter, r *http.Request) {
 		Reviews:     req.Reviews,
 		BeforeAfter: req.BeforeAfter,
 		CTA:         req.CTA,
+		TemplateID:  req.TemplateID,
+		ShowMotifs:  req.ShowMotifs,
 	})
 	if err != nil {
 		httpx.WriteError(w, err)
@@ -250,5 +256,7 @@ func toSettingsResponse(s domain.Settings) settingsResponse {
 		Reviews:     reviews,
 		BeforeAfter: beforeAfter,
 		CTA:         s.CTA,
+		TemplateID:  string(s.TemplateID),
+		ShowMotifs:  s.ShowMotifs,
 	}
 }

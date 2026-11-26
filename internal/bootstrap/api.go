@@ -25,6 +25,7 @@ import (
 	mediahttp "github.com/treatment-plus/treatment-plus-be/internal/media/http"
 	mediapg "github.com/treatment-plus/treatment-plus-be/internal/media/pg"
 	outputapp "github.com/treatment-plus/treatment-plus-be/internal/output/app"
+	outputdomain "github.com/treatment-plus/treatment-plus-be/internal/output/domain"
 	outputhttp "github.com/treatment-plus/treatment-plus-be/internal/output/http"
 	outputpdf "github.com/treatment-plus/treatment-plus-be/internal/output/pdf"
 	outputpg "github.com/treatment-plus/treatment-plus-be/internal/output/pg"
@@ -104,6 +105,8 @@ func (c *clinicSettingsAdapter) GetClinicSettings(ctx context.Context, wsID id.I
 		Lab:         toPlanLab(st.Lab),
 		Awards:      planapp.ClinicAwardsDTO{Text: st.Awards.Text, BadgeKeys: st.Awards.BadgeKeys},
 		Hotel:       planapp.ClinicHotelDTO{Name: st.Hotel.Name, Text: st.Hotel.Text, ImageKey: st.Hotel.ImageKey},
+		TemplateID:  string(st.TemplateID),
+		ShowMotifs:  st.ShowMotifs,
 	}, nil
 }
 
@@ -245,7 +248,8 @@ func NewAPI(ctx context.Context, cfg config.Config, log *slog.Logger) (*API, err
 	mediaStore := mediapg.New(pool)
 	mediaSvc := mediaapp.NewService(mediaStore)
 	outputStore := outputpg.New(pool)
-	outputSvc := outputapp.NewService(outputStore, outputpdf.NewRenderer(), mediaSvc, outputStore, outputpdf.AwardJPEG())
+	outputReader := &planPDFReaderAdapter{store: outputStore, planSvc: planSvc}
+	outputSvc := outputapp.NewService(outputReader, outputpdf.NewRenderer(), mediaSvc, outputStore, outputpdf.AwardJPEG())
 	vizSvc := vizapp.NewService(&planVizAdapter{svc: planSvc})
 
 	shareStore := sharepg.New(pool)
@@ -483,6 +487,11 @@ func (a *shareClinicAdapter) GetClinicBrand(ctx context.Context, clinicID id.ID)
 		Website:     st.Website,
 		Address:     st.Address,
 		Hours:       st.Hours,
+		Palette:     string(st.Palette),
+		Locale:      string(st.Locale),
+		Currency:    string(st.Currency),
+		TemplateID:  string(st.TemplateID),
+		ShowMotifs:  st.ShowMotifs,
 		LogoKey:     st.LogoKey,
 		CoverKey:    st.CoverKey,
 		MapURL:      st.MapURL,
@@ -552,6 +561,31 @@ func (a *shareVizAdapter) GetVizPlaylist(ctx context.Context, clinicID, planID i
 		PlanID: pl.PlanID,
 		Locale: pl.Locale,
 		Clips:  clips,
+	}, nil
+}
+
+type planPDFReaderAdapter struct {
+	store   *outputpg.Store
+	planSvc *planapp.Service
+}
+
+func (a *planPDFReaderAdapter) GetView(ctx context.Context, clinicID, planID id.ID) (outputdomain.PlanView, error) {
+	view, err := a.store.GetView(ctx, clinicID, planID)
+	if err == nil && len(view.Payload) > 0 {
+		return view, nil
+	}
+	// Fallback to live on-demand snapshot generation for draft or unfinalized plans
+	payload, snapErr := a.planSvc.BuildSnapshot(ctx, clinicID, planID)
+	if snapErr != nil {
+		if err != nil {
+			return outputdomain.PlanView{}, err
+		}
+		return outputdomain.PlanView{}, snapErr
+	}
+	return outputdomain.PlanView{
+		PlanID:   planID,
+		ClinicID: clinicID,
+		Payload:  payload,
 	}, nil
 }
 

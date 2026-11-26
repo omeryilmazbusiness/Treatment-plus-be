@@ -51,6 +51,43 @@ func ParsePalette(s string) (Palette, error) {
 	}
 }
 
+type TemplateID string
+
+const (
+	TemplateKlinikMinimal      TemplateID = "klinik-minimal"
+	TemplateModernGeometric    TemplateID = "modern-geometric"
+	TemplateBotanicalSerenity  TemplateID = "botanical-serenity"
+	TemplateLiquidArt          TemplateID = "liquid-art"
+	TemplateNoirGold           TemplateID = "noir-gold"
+	TemplateRoyalGold          TemplateID = "royal-gold"
+	TemplateClassicRibbon      TemplateID = "classic-ribbon"
+	TemplateExecutiveSplit     TemplateID = "executive-split"
+	TemplateBotanicalAesthetic TemplateID = "botanical-aesthetic"
+	TemplatePediatricJoy       TemplateID = "pediatric-joy"
+	TemplatePrestigeMinimal    TemplateID = "prestige-minimal"
+)
+
+func ParseTemplateID(s string) (TemplateID, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case string(TemplateKlinikMinimal), "":
+		return TemplateKlinikMinimal, nil
+	case string(TemplateModernGeometric):
+		return TemplateModernGeometric, nil
+	case string(TemplateBotanicalSerenity):
+		return TemplateBotanicalSerenity, nil
+	case string(TemplateLiquidArt):
+		return TemplateLiquidArt, nil
+	case string(TemplateNoirGold):
+		return TemplateNoirGold, nil
+	case string(TemplateRoyalGold):
+		return TemplateRoyalGold, nil
+	case string(TemplateClassicRibbon), string(TemplateExecutiveSplit), string(TemplateBotanicalAesthetic), string(TemplatePediatricJoy), string(TemplatePrestigeMinimal):
+		return TemplateKlinikMinimal, nil
+	default:
+		return TemplateKlinikMinimal, nil
+	}
+}
+
 func ParseCurrency(s string) (money.Currency, error) {
 	c := money.Currency(strings.ToUpper(strings.TrimSpace(s)))
 	if !money.ValidCurrency(c) {
@@ -90,6 +127,8 @@ type Settings struct {
 	Reviews     []Review
 	BeforeAfter []BeforeAfterCase
 	CTA         CTAConfig
+	TemplateID  TemplateID
+	ShowMotifs  bool
 }
 
 func (s Settings) ClinicID() id.ID {
@@ -103,6 +142,8 @@ func DefaultSettings(workspaceID id.ID, name string) Settings {
 		Locale:      LocaleTR,
 		Currency:    money.TRY,
 		Palette:     PaletteNavy,
+		TemplateID:  TemplateClassicRibbon,
+		ShowMotifs:  true,
 	}
 }
 
@@ -117,6 +158,9 @@ func (s Settings) Validate() error {
 		return err
 	}
 	if _, err := ParsePalette(string(s.Palette)); err != nil {
+		return err
+	}
+	if _, err := ParseTemplateID(string(s.TemplateID)); err != nil {
 		return err
 	}
 	return nil

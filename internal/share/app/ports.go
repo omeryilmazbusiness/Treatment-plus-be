@@ -153,6 +153,11 @@ type SharedClinicData struct {
 	Website     string                  `json:"website"`
 	Address     string                  `json:"address"`
 	Hours       string                  `json:"hours"`
+	Palette     string                  `json:"palette,omitempty"`
+	Locale      string                  `json:"locale,omitempty"`
+	Currency    string                  `json:"currency,omitempty"`
+	TemplateID  string                  `json:"template_id,omitempty"`
+	ShowMotifs  bool                    `json:"show_motifs,omitempty"`
 	LogoKey     string                  `json:"logo_key"`
 	CoverKey    string                  `json:"cover_key"`
 	MapURL      string                  `json:"map_url"`

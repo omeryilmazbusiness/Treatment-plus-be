@@ -275,6 +275,8 @@ type ClinicSnapshot struct {
 	Lab         ClinicLabSnapshot    `json:"lab"`
 	Awards      ClinicAwardsSnapshot `json:"awards"`
 	Hotel       ClinicHotelSnapshot  `json:"hotel"`
+	TemplateID  string               `json:"template_id"`
+	ShowMotifs  bool                 `json:"show_motifs"`
 }
 
 type PatientSnapshot struct {

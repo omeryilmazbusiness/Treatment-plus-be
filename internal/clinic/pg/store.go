@@ -41,6 +41,8 @@ func (s *Store) GetSettings(ctx context.Context, workspaceID id.ID) (domain.Sett
 			awardsJSON, hotelJSON                    []byte
 			teamJSON, reviewsJSON                    []byte
 			beforeAfterJSON, ctaJSON                 []byte
+			templateID                               string
+			showMotifs                               bool
 		)
 
 		row := tx.QueryRow(ctx, `
@@ -49,7 +51,8 @@ func (s *Store) GetSettings(ctx context.Context, workspaceID id.ID) (domain.Sett
 			       map_url, intro, legal, about_text, about_image_key, welcome_body,
 			       signer_name, signer_title,
 			       highlights_json, doctor_json, lab_json, awards_json, hotel_json,
-			       team_json, reviews_json, before_after_json, cta_json
+			       team_json, reviews_json, before_after_json, cta_json,
+			       template_id, show_motifs
 			FROM clinic_settings
 			WHERE workspace_id = $1
 		`, toUUID(workspaceID))
@@ -61,6 +64,7 @@ func (s *Store) GetSettings(ctx context.Context, workspaceID id.ID) (domain.Sett
 			&signerName, &signerTitle,
 			&highlightsJSON, &doctorJSON, &labJSON, &awardsJSON, &hotelJSON,
 			&teamJSON, &reviewsJSON, &beforeAfterJSON, &ctaJSON,
+			&templateID, &showMotifs,
 		)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -80,6 +84,10 @@ func (s *Store) GetSettings(ctx context.Context, workspaceID id.ID) (domain.Sett
 		pal, err := domain.ParsePalette(palette)
 		if err != nil {
 			return err
+		}
+		tpl, err := domain.ParseTemplateID(templateID)
+		if err != nil {
+			tpl = domain.TemplateClassicRibbon
 		}
 
 		out = domain.Settings{
@@ -113,6 +121,8 @@ func (s *Store) GetSettings(ctx context.Context, workspaceID id.ID) (domain.Sett
 			Reviews:     decodeJSON[[]domain.Review](reviewsJSON),
 			BeforeAfter: decodeJSON[[]domain.BeforeAfterCase](beforeAfterJSON),
 			CTA:         decodeJSON[domain.CTAConfig](ctaJSON),
+			TemplateID:  tpl,
+			ShowMotifs:  showMotifs,
 		}
 		return nil
 	})
@@ -120,6 +130,9 @@ func (s *Store) GetSettings(ctx context.Context, workspaceID id.ID) (domain.Sett
 }
 
 func (s *Store) SaveSettings(ctx context.Context, settings domain.Settings) error {
+	if settings.TemplateID == "" {
+		settings.TemplateID = domain.TemplateClassicRibbon
+	}
 	if err := settings.Validate(); err != nil {
 		return err
 	}
@@ -184,14 +197,16 @@ func (s *Store) SaveSettings(ctx context.Context, settings domain.Settings) erro
 				map_url, intro, legal, about_text, about_image_key, welcome_body,
 				signer_name, signer_title,
 				highlights_json, doctor_json, lab_json, awards_json, hotel_json,
-				team_json, reviews_json, before_after_json, cta_json
+				team_json, reviews_json, before_after_json, cta_json,
+				template_id, show_motifs
 			) VALUES (
 				$1, $2, $3, $4, $5, $6,
 				$7, $8, $9, $10, $11, $12, $13,
 				$14, $15, $16, $17, $18, $19,
 				$20, $21,
 				$22, $23, $24, $25, $26,
-				$27, $28, $29, $30
+				$27, $28, $29, $30,
+				$31, $32
 			)
 			ON CONFLICT (workspace_id) DO UPDATE SET
 				name = EXCLUDED.name,
@@ -223,6 +238,8 @@ func (s *Store) SaveSettings(ctx context.Context, settings domain.Settings) erro
 				reviews_json = EXCLUDED.reviews_json,
 				before_after_json = EXCLUDED.before_after_json,
 				cta_json = EXCLUDED.cta_json,
+				template_id = EXCLUDED.template_id,
+				show_motifs = EXCLUDED.show_motifs,
 				updated_at = now()
 		`,
 			toUUID(settings.WorkspaceID),
@@ -255,6 +272,8 @@ func (s *Store) SaveSettings(ctx context.Context, settings domain.Settings) erro
 			reviewsJSON,
 			beforeAfterJSON,
 			ctaJSON,
+			string(settings.TemplateID),
+			settings.ShowMotifs,
 		)
 		if err != nil {
 			return err

@@ -590,13 +590,10 @@ func (s *Service) PutDiscounts(ctx context.Context, wsID id.ID, planID id.ID, di
 	return s.GetPlan(ctx, wsID, planID)
 }
 
-func (s *Service) SetReady(ctx context.Context, wsID id.ID, planID id.ID) (domain.Plan, error) {
+func (s *Service) BuildSnapshot(ctx context.Context, wsID id.ID, planID id.ID) ([]byte, error) {
 	current, err := s.GetPlan(ctx, wsID, planID)
 	if err != nil {
-		return domain.Plan{}, err
-	}
-	if !current.CanModify() {
-		return current, nil // Already locked or past draft (ready, sent, viewed, accepted) - idempotent success
+		return nil, err
 	}
 
 	var clinicSnap domain.ClinicSnapshot
@@ -684,6 +681,22 @@ func (s *Service) SetReady(ctx context.Context, wsID id.ID, planID id.ID) (domai
 	snapBytes, err := json.Marshal(snapshot)
 	if err != nil {
 		s.logger().ErrorContext(ctx, "failed to marshal plan snapshot", "plan_id", planID, "error", err)
+		return nil, err
+	}
+	return snapBytes, nil
+}
+
+func (s *Service) SetReady(ctx context.Context, wsID id.ID, planID id.ID) (domain.Plan, error) {
+	current, err := s.GetPlan(ctx, wsID, planID)
+	if err != nil {
+		return domain.Plan{}, err
+	}
+	if !current.CanModify() {
+		return current, nil // Already locked or past draft (ready, sent, viewed, accepted) - idempotent success
+	}
+
+	snapBytes, err := s.BuildSnapshot(ctx, wsID, planID)
+	if err != nil {
 		return domain.Plan{}, err
 	}
 
@@ -901,8 +914,10 @@ func snapshotClinic(st ClinicSettingsDTO) domain.ClinicSnapshot {
 		Lab: domain.ClinicLabSnapshot{
 			Title: st.Lab.Title, Text: st.Lab.Text, ImageKey: st.Lab.ImageKey, Stats: labStats,
 		},
-		Awards: domain.ClinicAwardsSnapshot{Text: st.Awards.Text, BadgeKeys: st.Awards.BadgeKeys},
-		Hotel:  domain.ClinicHotelSnapshot{Name: st.Hotel.Name, Text: st.Hotel.Text, ImageKey: st.Hotel.ImageKey},
+		Awards:     domain.ClinicAwardsSnapshot{Text: st.Awards.Text, BadgeKeys: st.Awards.BadgeKeys},
+		Hotel:      domain.ClinicHotelSnapshot{Name: st.Hotel.Name, Text: st.Hotel.Text, ImageKey: st.Hotel.ImageKey},
+		TemplateID: st.TemplateID,
+		ShowMotifs: st.ShowMotifs,
 	}
 }
 
