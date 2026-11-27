@@ -711,7 +711,7 @@ components:
                 type: object
                 properties:
                   tooth: { type: string }
-                  status: { type: string, enum: [intact, missing, filled, crown] }
+                  status: { type: string, enum: [intact, missing, filled, crown, caries, root_canal, implant, bridge] }
                   note: { type: string }
             general_diagnoses:
               type: array
@@ -733,6 +733,9 @@ components:
             type: object
             properties:
               treatment_name: { type: string }
+              animation_code:
+                type: string
+                enum: [fissure_sealant, topical_fluoride, desensitizer, night_guard, composite_filling, amalgam_filling, inlay_onlay, office_whitening, composite_bonding, root_canal, retreatment, pulp_cap, post_core, apexification, zirconia_crown, pfm_crown, emax_veneer, temp_crown, bridge, scaling, root_planing, gingivectomy, frenectomy, gum_graft, extraction, surgical_extraction, apicoectomy, implant, bone_graft_sinus, braces, aligner_attachment, impacted_exposure]
               description: { type: string }
               teeth:
                 type: array

@@ -75,6 +75,7 @@ func TestPlaylistReadyItems(t *testing.T) {
 		plan:   plan.String(),
 		items: []app.ItemRef{
 			{AnimationCode: "implant", TreatmentName: "Diş İmplantı", Teeth: []string{"16"}},
+			{TreatmentName: "Diş Taşı Temizliği"},
 			{TreatmentName: "Panoramik", Teeth: []string{"16"}},
 		},
 	})
@@ -82,7 +83,7 @@ func TestPlaylistReadyItems(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pl.Clips) != 1 || pl.Clips[0].Code != domain.Implant {
+	if len(pl.Clips) != 2 || pl.Clips[0].Code != domain.Implant || pl.Clips[1].Code != domain.Scaling || len(pl.Clips[1].Teeth) == 0 {
 		t.Fatalf("%+v", pl)
 	}
 }

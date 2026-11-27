@@ -28,6 +28,12 @@ func TestClassicFormSectionsOrder(t *testing.T) {
 			if strings.HasPrefix(f.Name, "clinic.") || f.Name == "logo_key" {
 				t.Fatalf("clinic brand leaked into plan form: %s", f.Name)
 			}
+			if f.Name == "situation.tooth_findings.status" && len(f.Enum) != 8 {
+				t.Fatalf("expected 8 tooth finding statuses, got %v", f.Enum)
+			}
+			if f.Name == "items.animation_code" && len(f.Enum) != 32 {
+				t.Fatalf("expected 32 animation codes in form enum, got %d", len(f.Enum))
+			}
 		}
 	}
 }

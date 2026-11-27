@@ -900,8 +900,254 @@ export function playRootCanal(ctx, fdi = "16") {
 
 export { lookCam as flyCamera };
 
+const DEFAULT_RECIPES = {
+  topical_fluoride: { title: "Topikal Flor", cam: "overview", moves: [{ n: 1, title: "İzolasyon", effects: [{ op: "gum", target: "retract" }] }, { n: 2, title: "Jel uygulaması", effects: [{ op: "fluid", color: "#a5f3fc" }, { op: "particles", color: "#e0f2fe" }] }] },
+  desensitizer: { title: "Hassasiyet giderici", cam: "occlusal", moves: [{ n: 1, title: "Hassas boyun", effects: [{ op: "hotspot", color: "#ef4444" }] }, { n: 2, title: "Ajan uygulaması", effects: [{ op: "fluid", color: "#22d3ee" }, { op: "glow", color: "#4ade80" }] }] },
+  night_guard: { title: "Gece plağı / splint", cam: "overview", moves: [{ n: 1, title: "Kapanış analizi", effects: [{ op: "glow", color: "#38bdf8" }] }, { n: 2, title: "Plak oturur", effects: [{ op: "seat", color: "#e0f2fe", mesh: "splint" }] }] },
+  composite_filling: { title: "Kompozit dolgu", cam: "occlusal", moves: [{ n: 1, title: "Çürük temizliği", effects: [{ op: "hotspot", target: "caries" }, { op: "tool", target: "bur" }, { op: "hide", target: "caries" }] }, { n: 2, title: "Kompozit dolgu", effects: [{ op: "fluid", color: "#f5d0c5" }] }, { n: 3, title: "Işık ve cila", effects: [{ op: "tool", target: "led" }, { op: "material", color: "#fde8d8" }] }] },
+  amalgam_filling: { title: "Amalgam dolgu", cam: "occlusal", moves: [{ n: 1, title: "Kaviteye amalgam", effects: [{ op: "overlay", color: "#9ca3af" }] }, { n: 2, title: "Metal parlaklık", effects: [{ op: "material", color: "#d1d5db" }] }] },
+  inlay_onlay: { title: "İnley / onley / overlay", cam: "occlusal", moves: [{ n: 1, title: "Hazır kavite", effects: [{ op: "hotspot", color: "#78716c" }] }, { n: 2, title: "Blok oturur", effects: [{ op: "seat", color: "#f5e6d3" }] }] },
+  office_whitening: { title: "Ofis tipi beyazlatma", cam: "overview", moves: [{ n: 1, title: "Diş eti bariyeri", effects: [{ op: "barrier", color: "#3b82f6" }] }, { n: 2, title: "Jel ve ışık", effects: [{ op: "fluid", color: "#f8fafc" }, { op: "light", color: "#e9d5ff" }] }, { n: 3, title: "Ton açılır", effects: [{ op: "shade", color: "#fffaf3" }] }] },
+  composite_bonding: { title: "Kompozit bonding", cam: "occlusal", moves: [{ n: 1, title: "Kırık uç hazırlığı", effects: [{ op: "hotspot", color: "#fca5a5" }] }, { n: 2, title: "Form tamamlanır", effects: [{ op: "fluid", color: "#f5d0c5" }, { op: "tool", target: "led" }] }] },
+  retreatment: { title: "Kanal yenileme", cam: "section", moves: [{ n: 1, title: "Eski kanal dolgusu", effects: [{ op: "xray" }, { op: "hotspot", color: "#a8a29e" }] }, { n: 2, title: "Söküm ve temizlik", effects: [{ op: "tool", target: "file" }] }, { n: 3, title: "Yeniden dolum", effects: [{ op: "fluid", color: "#f9a8d4" }] }] },
+  pulp_cap: { title: "Kuafaj / pulpotomi", cam: "section", moves: [{ n: 1, title: "Derin çürük", effects: [{ op: "xray" }, { op: "hotspot", color: "#f97316" }] }, { n: 2, title: "Koruyucu örtücü", effects: [{ op: "overlay", color: "#f8fafc" }] }] },
+  post_core: { title: "Post-core", cam: "section", moves: [{ n: 1, title: "Madde kaybı", effects: [{ op: "xray" }] }, { n: 2, title: "Fiber post yerleşimi", effects: [{ op: "seat", color: "#64748b", mesh: "post" }] }, { n: 3, title: "Kor restorasyon", effects: [{ op: "overlay", color: "#e7e5e4" }] }] },
+  apexification: { title: "Apeksifikasyon", cam: "section", moves: [{ n: 1, title: "Açık apeks", effects: [{ op: "xray" }, { op: "hotspot", color: "#f87171" }] }, { n: 2, title: "MTA apikal tıkaç", effects: [{ op: "overlay", color: "#e7e5e4" }] }] },
+  zirconia_crown: { title: "Zirkonyum kron", cam: "occlusal", moves: [{ n: 1, title: "Diş kesimi (güdük)", effects: [{ op: "material", target: "stump" }] }, { n: 2, title: "Zirkonyum altyapı", effects: [{ op: "seat", color: "#e5e7eb" }] }, { n: 3, title: "Zirkonyum kron simantasyonu", effects: [{ op: "seat", color: "#f8fafc", mesh: "zirconia" }] }] },
+  pfm_crown: { title: "Metal destekli porselen", cam: "occlusal", moves: [{ n: 1, title: "Metal altyapı", effects: [{ op: "material", target: "stump" }, { op: "seat", color: "#9ca3af" }] }, { n: 2, title: "Porselen üst yapı", effects: [{ op: "seat", color: "#f5e6d3" }] }] },
+  emax_veneer: { title: "E-max / lamine", cam: "occlusal", moves: [{ n: 1, title: "Ön yüzey aşındırma", effects: [{ op: "material", target: "stump" }] }, { n: 2, title: "Lamine yaprak oturur", effects: [{ op: "seat", color: "#f8fafc" }] }] },
+  temp_crown: { title: "Geçici kron", cam: "occlusal", moves: [{ n: 1, title: "Geçici kron yerleştirilir", effects: [{ op: "seat", color: "#fde68a" }] }] },
+  bridge: { title: "Köprü protez", cam: "occlusal", moves: [{ n: 1, title: "Destek diş hazırlığı", effects: [{ op: "material", target: "stump" }] }, { n: 2, title: "Köprü gövdesi yerleşimi", effects: [{ op: "seat", color: "#f8fafc", mesh: "bridge" }] }] },
+  scaling: { title: "Diş taşı temizliği", cam: "occlusal", moves: [{ n: 1, title: "Tartar tespiti", effects: [{ op: "hotspot", color: "#a16207" }] }, { n: 2, title: "Ultrasonik temizlik", effects: [{ op: "tool", target: "scaler" }, { op: "particles" }, { op: "glow" }] }] },
+  root_planing: { title: "Küretaj", cam: "section", moves: [{ n: 1, title: "Periodontal cep", effects: [{ op: "hotspot", color: "#fca5a5" }] }, { n: 2, title: "Kök yüzeyi düzleştirme", effects: [{ op: "tool", target: "curette" }, { op: "gum", color: "#f9a8d4" }] }] },
+  gingivectomy: { title: "Gingivektomi", cam: "overview", moves: [{ n: 1, title: "Diş eti seviyesi", effects: [{ op: "hotspot", color: "#ef4444" }] }, { n: 2, title: "Lazer şekillendirme", effects: [{ op: "tool", target: "laser" }, { op: "gum", target: "trim" }] }] },
+  frenectomy: { title: "Frenektomi", cam: "overview", moves: [{ n: 1, title: "Frenulum bağı", effects: [{ op: "hotspot", color: "#f97316" }] }, { n: 2, title: "Lazer ile serbestleştirme", effects: [{ op: "tool", target: "laser" }] }] },
+  gum_graft: { title: "Diş eti grefti", cam: "occlusal", moves: [{ n: 1, title: "Diş eti çekilmesi", effects: [{ op: "hotspot", color: "#fca5a5" }] }, { n: 2, title: "Greft dokusu yerleşimi", effects: [{ op: "seat", color: "#fda4af" }] }] },
+  extraction: { title: "Normal çekim", cam: "occlusal", moves: [{ n: 1, title: "Diş mobilizasyonu", effects: [{ op: "hotspot", color: "#78716c" }] }, { n: 2, title: "Elevatör ve davye ile çekim", effects: [{ op: "extract" }] }] },
+  surgical_extraction: { title: "Cerrahi / gömülü çekim", cam: "section", moves: [{ n: 1, title: "Flep ve kemik erişimi", effects: [{ op: "xray" }, { op: "hotspot", color: "#a8a29e" }] }, { n: 2, title: "Cerrahi çıkarım ve sütür", effects: [{ op: "extract" }, { op: "gum", target: "suture" }] }] },
+  apicoectomy: { title: "Apikal rezeksiyon", cam: "section", moves: [{ n: 1, title: "Kök ucu lezyonu", effects: [{ op: "xray" }, { op: "hotspot", color: "#ef4444" }] }, { n: 2, title: "Apikal rezeksiyon", effects: [{ op: "tool", target: "bur" }, { op: "hide", target: "cyst" }] }] },
+  implant: { title: "Diş implantı", cam: "section", moves: [{ n: 1, title: "İmplant yuvası", effects: [{ op: "hide", target: "tooth" }] }, { n: 2, title: "Titanyum implant vidası", effects: [{ op: "seat", color: "#94a3b8", mesh: "implant" }] }, { n: 3, title: "Abutment ve zirkonyum kron", effects: [{ op: "seat", color: "#f8fafc", mesh: "zirconia" }] }] },
+  bone_graft_sinus: { title: "Kemik grefti ve sinüs lifting", cam: "section", moves: [{ n: 1, title: "Sinüs tabanı analizi", effects: [{ op: "xray" }, { op: "hotspot", color: "#7dd3fc" }] }, { n: 2, title: "Membran elevasyonu ve greft", effects: [{ op: "particles", color: "#e7e5e4" }, { op: "seat", color: "#e7e5e4" }] }] },
+  braces: { title: "Braket", cam: "overview", moves: [{ n: 1, title: "Ark analizi", effects: [{ op: "hotspot", color: "#fbbf24" }] }, { n: 2, title: "Braketlerin yapıştırılması", effects: [{ op: "overlay", color: "#e5e7eb" }] }, { n: 3, title: "Ark teli aktivasyonu", effects: [{ op: "seat", color: "#94a3b8" }] }] },
+  aligner_attachment: { title: "Şeffaf plak attachment", cam: "overview", moves: [{ n: 1, title: "Kompozit ataşmanlar", effects: [{ op: "overlay", color: "#fde68a" }] }, { n: 2, title: "Şeffaf plak oturumu", effects: [{ op: "seat", color: "#e0f2fe" }] }] },
+  impacted_exposure: { title: "Gömülü diş sürdürme", cam: "section", moves: [{ n: 1, title: "Gömülü kanin tespiti", effects: [{ op: "xray" }, { op: "hotspot", color: "#a8a29e" }] }, { n: 2, title: "Buton ve ortodontik traksiyon", effects: [{ op: "overlay", color: "#22c55e" }] }] },
+};
+
+function cameraActionForMove(move, fallback = "occlusal") {
+  const camFx = (move?.effects || []).find((e) => e.op === "camera");
+  const t = camFx?.target || fallback;
+  if (t === "xray" || t === "sinus" || t === "section") return "section";
+  if (t === "arch" || t === "smile" || t === "overview") return "overview";
+  return "occlusal";
+}
+
+export function playProceduralRecipe(ctx, code, fdi = "16", customMoves = null, customTitle = "") {
+  if (code === "fissure_sealant") return playFissureSealant(ctx, fdi);
+  if (code === "root_canal") return playRootCanal(ctx, fdi);
+  if (code === "retreatment") return playRootCanal(ctx, fdi);
+
+  const root = ctx.root;
+  const spec = DEFAULT_RECIPES[code] || { title: customTitle || code, cam: "occlusal", moves: [] };
+  const moves = (customMoves && customMoves.length ? customMoves : spec.moves) || [];
+  const titleLabel = customTitle || spec.title || code;
+
+  const teeth = archMesh(root, fdi);
+  const target = teeth || root;
+  const { upper, right } = fdiMeta(fdi);
+  const firstAction = cameraActionForMove(moves[0], spec.cam || "occlusal");
+  const framed = getOptimalCameraPosition(target, archTypeOf(fdi), { fdi, actionType: firstAction });
+  const molar = framed.toothPosition;
+  const frame = { pos: framed.targetCameraPosition, target: framed.targetLookAt, dist: framed.dist };
+  const radius = toothRadius(target);
+  const canalLen = radius * 3.2;
+  const { orifice, apex, dir: apexDir } = apexDirOf(molar, upper, canalLen);
+  const occlusalOut = apexDir.clone().negate();
+  const uniforms = bindUniforms(molar, radius * 1.05, frame.pos.clone().sub(molar));
+
+  ctx.restore();
+  clearProps(ctx);
+  attachDirectorMat(target, uniforms, `recipe-${code}-section`);
+
+  const drop = makeDroplet(radius * 0.22);
+  drop.visible = false;
+  ctx.scene.add(drop);
+
+  const cap = makeCoreCap(radius * (code === "bridge" ? 1.55 : 0.92));
+  cap.position.copy(orifice);
+  cap.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), occlusalOut);
+  cap.visible = false;
+  ctx.scene.add(cap);
+
+  const screw = makeGutta(canalLen * 0.92, radius * 0.28);
+  screw.material.color.set(0x94a3b8);
+  screw.material.metalness = 0.78;
+  screw.material.roughness = 0.28;
+  screw.position.copy(apex);
+  screw.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), occlusalOut);
+  screw.scale.set(1, 0.001, 1);
+  screw.visible = false;
+  ctx.scene.add(screw);
+
+  const led = makeLED(radius * 1.65);
+  led.visible = false;
+  ctx.scene.add(led);
+
+  const airotorSrc = ctx.airotor?.scene || ctx.airotor;
+  const rig = makeHedstromRig(canalLen * 0.95, radius * 0.09, airotorSrc);
+  rig.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), occlusalOut);
+  rig.visible = false;
+  ctx.scene.add(rig);
+
+  const tl = ctx.gsap.timeline({ paused: true, defaults: { ease: EASE } });
+
+  const introAt = tl.duration();
+  tl.add(() => ctx.caption(`${titleLabel} — Kadraj`, archApproachLabel(fdi)), introAt);
+  approachTooth(ctx, fdi, firstAction, tl, introAt);
+
+  moves.forEach((mv, idx) => {
+    tl.add(() => {}, "+=0.15");
+    const at = tl.duration();
+    const stepDur = Math.max(1.1, Math.min(2.4, (mv.duration_ms || 2200) / 1000));
+    const effects = mv.effects || [];
+
+    tl.add(() => {
+      ctx.caption(`${titleLabel} · Hamle ${mv.n || idx + 1}`, mv.title || "");
+    }, at);
+
+    effects.forEach((ef) => {
+      const col = ef.color ? new THREE.Color(ef.color) : null;
+      switch (ef.op) {
+        case "xray":
+          tl.to(uniforms.uSection, { value: 1, duration: 0.65 }, at);
+          break;
+        case "hotspot":
+        case "glow":
+          if (ef.target === "caries") {
+            tl.to(uniforms.uCariesSpot, { value: 1, duration: 0.55 }, at);
+          }
+          tl.to(uniforms.uScan, { value: 1, duration: 0.45 }, at);
+          tl.to(uniforms.uPulse, { value: 1, duration: stepDur * 0.75, ease: "sine.inOut" }, at);
+          tl.to(uniforms.uScan, { value: 0.2, duration: 0.35 }, at + stepDur * 0.75);
+          break;
+        case "hide":
+          if (ef.target === "caries") {
+            tl.to(uniforms.uCariesSpot, { value: 0, duration: 0.55 }, at);
+          } else if (ef.target === "tooth") {
+            tl.to(uniforms.uExtractMask, { value: 1, duration: 0.65 }, at);
+          }
+          break;
+        case "extract":
+          tl.to(uniforms.uScan, { value: 0.9, duration: 0.3 }, at);
+          tl.to(uniforms.uExtractMask, { value: 1, duration: 0.85 }, at + 0.35);
+          break;
+        case "material":
+        case "shade":
+          if (ef.target === "stump" || ef.target === "facial") {
+            tl.to(uniforms.uPrepShrink, { value: 0.32, duration: 0.75 }, at);
+          } else {
+            tl.to(uniforms.uClean, { value: 1, duration: 0.75 }, at);
+          }
+          break;
+        case "fluid":
+        case "barrier": {
+          const startPos = molar.clone().addScaledVector(occlusalOut, radius * 3.6);
+          const landPos = molar.clone().addScaledVector(occlusalOut, radius * 0.14);
+          tl.add(() => {
+            if (col) drop.material.color.copy(col);
+            drop.position.copy(startPos);
+            drop.scale.setScalar(0.05);
+            drop.visible = true;
+          }, at);
+          tl.to(drop.scale, { x: 1.5, y: 0.25, z: 1.35, duration: stepDur * 0.65 }, at);
+          tl.to(drop.position, { x: landPos.x, y: landPos.y, z: landPos.z, duration: stepDur * 0.65 }, at);
+          break;
+        }
+        case "tool":
+        case "light": {
+          if (ef.target === "led" || ef.op === "light" || ef.target === "laser") {
+            const hover = molar.clone()
+              .addScaledVector(occlusalOut, 0.0025)
+              .add(new THREE.Vector3(right ? -radius * 0.85 : radius * 0.85, 0, radius * 0.35));
+            const park = hover.clone().addScaledVector(occlusalOut, radius * 5);
+            tl.add(() => {
+              led.position.copy(park);
+              led.lookAt(molar);
+              led.visible = true;
+            }, at);
+            tl.to(led.position, { x: hover.x, y: hover.y, z: hover.z, duration: 0.55, onUpdate: () => led.lookAt(molar) }, at);
+            tl.to(led.userData.light, { intensity: 0.85, duration: 0.3 }, at + 0.45);
+            tl.to(led.userData.light, { intensity: 0, duration: 0.35 }, at + stepDur - 0.35);
+          } else {
+            const parked = orifice.clone().addScaledVector(occlusalOut, canalLen * 1.1);
+            const work = orifice.clone().addScaledVector(occlusalOut, radius * 0.12);
+            tl.add(() => {
+              rig.position.copy(parked);
+              rig.visible = true;
+            }, at);
+            tl.to(rig.position, {
+              x: work.x, y: work.y, z: work.z, duration: stepDur * 0.5,
+              onComplete: () => burstDebris(ctx, work.clone(), occlusalOut, radius, ctx.gsap),
+            }, at);
+            tl.to(rig.position, { x: parked.x, y: parked.y, z: parked.z, duration: stepDur * 0.4 }, at + stepDur * 0.55);
+            tl.add(() => { rig.visible = false; }, at + stepDur);
+          }
+          break;
+        }
+        case "particles":
+          tl.add(() => burstDebris(ctx, orifice.clone(), occlusalOut, radius * 1.1, ctx.gsap), at + 0.25);
+          break;
+        case "seat":
+        case "overlay": {
+          if (ef.mesh === "implant" || ef.mesh === "post") {
+            tl.add(() => {
+              if (col) screw.material.color.copy(col);
+              screw.visible = true;
+            }, at);
+            tl.to(screw.scale, { y: 1, duration: stepDur * 0.75, ease: "power2.out" }, at);
+            tl.to(screw.material, { opacity: 0.96, duration: stepDur * 0.6 }, at);
+          } else {
+            const fromPos = orifice.clone().addScaledVector(occlusalOut, radius * 2.4);
+            tl.add(() => {
+              if (col) cap.material.color.copy(col);
+              cap.position.copy(fromPos);
+              cap.material.opacity = 0;
+              cap.visible = true;
+            }, at);
+            tl.to(cap.position, { x: orifice.x, y: orifice.y, z: orifice.z, duration: stepDur * 0.75, ease: "power2.out" }, at);
+            tl.to(cap.material, { opacity: 0.95, duration: stepDur * 0.6 }, at);
+          }
+          break;
+        }
+        default:
+          tl.to(uniforms.uPulse, { value: 1, duration: stepDur * 0.6 }, at);
+          break;
+      }
+    });
+  });
+
+  tl.add(() => {}, "+=0.35");
+  tl.add(() => {
+    detachDirectorMat(target);
+    ctx.restore();
+    ensureOpenMouth(root, ctx.gsap, OPEN_ANGLE, 0);
+    ctx.caption("Tamam", `${titleLabel} simülasyonu tamamlandı`);
+    setDoF(ctx, frame.dist, 0.003, { aperture: 0.00012 });
+    ctx.controls.enabled = true;
+  });
+
+  requestAnimationFrame(() => tl.play(0));
+  return tl;
+}
+
 export const Cinematics = {
   fissure_sealant: playFissureSealant,
   root_canal: playRootCanal,
   hedstrom_cleaning: (ctx, fdi) => playHedstromCleaningAnimation(ctx, fdi).tl,
 };
+
+Object.keys(DEFAULT_RECIPES).forEach((code) => {
+  if (!Cinematics[code]) {
+    Cinematics[code] = (ctx, fdi, clip) =>
+      playProceduralRecipe(ctx, code, fdi, clip?.moves, clip?.title);
+  }
+});

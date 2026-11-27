@@ -21,6 +21,27 @@ type FormSection struct {
 	Fields      []FormField `json:"fields"`
 }
 
+// SupportedAnimationCodes returns the canonical 3D simulation codes selectable on plan items.
+func SupportedAnimationCodes() []string {
+	return []string{
+		"fissure_sealant", "topical_fluoride", "desensitizer", "night_guard",
+		"composite_filling", "amalgam_filling", "inlay_onlay", "office_whitening", "composite_bonding",
+		"root_canal", "retreatment", "pulp_cap", "post_core", "apexification",
+		"zirconia_crown", "pfm_crown", "emax_veneer", "temp_crown", "bridge",
+		"scaling", "root_planing", "gingivectomy", "frenectomy", "gum_graft",
+		"extraction", "surgical_extraction", "apicoectomy", "implant", "bone_graft_sinus",
+		"braces", "aligner_attachment", "impacted_exposure",
+	}
+}
+
+// SupportedToothStatuses returns all valid odontogram tooth statuses.
+func SupportedToothStatuses() []string {
+	return []string{
+		ToothIntact, ToothMissing, ToothFilled, ToothCrown,
+		ToothCaries, ToothRootCanal, ToothImplant, ToothBridge,
+	}
+}
+
 func ClassicFormSections() []FormSection {
 	return []FormSection{
 		{
@@ -56,7 +77,7 @@ func ClassicFormSections() []FormSection {
 				{Name: "situation.xray_key", Label: "Röntgen görseli", Type: "string", Required: false},
 				{Name: "situation.chart_teeth", Label: "Mevcut odontogram dişleri", Type: "string[]", Required: false, Repeatable: true},
 				{Name: "situation.tooth_findings.tooth", Label: "Diş no (FDI)", Type: "string", Required: false, Repeatable: true},
-				{Name: "situation.tooth_findings.status", Label: "Diş durumu", Type: "enum", Required: false, Repeatable: true, Enum: []string{"intact", "missing", "filled", "crown"}},
+				{Name: "situation.tooth_findings.status", Label: "Diş durumu", Type: "enum", Required: false, Repeatable: true, Enum: SupportedToothStatuses()},
 				{Name: "situation.tooth_findings.note", Label: "Diş notu", Type: "string", Required: false, Repeatable: true},
 				{Name: "situation.general_diagnoses", Label: "Genel tanılar", Type: "string[]", Required: false, Repeatable: true, Description: "Örn. gingivitis."},
 			},
@@ -73,7 +94,7 @@ func ClassicFormSections() []FormSection {
 				{Name: "visits.healing_note", Label: "İyileşme notu", Type: "string", Required: false, Repeatable: true},
 				{Name: "visits.chart_teeth", Label: "Planlı odontogram dişleri", Type: "string[]", Required: false, Repeatable: true},
 				{Name: "items.treatment_name", Label: "Tedavi adı", Type: "string", Required: true, Repeatable: true},
-				{Name: "items.animation_code", Label: "3D sahne kodu", Type: "string", Required: false, Repeatable: true, Description: "Örn. implant, zirconia_crown. Boşsa tedavi adından çözülür. Katalog: GET /v1/viz/recipes"},
+				{Name: "items.animation_code", Label: "3D sahne kodu", Type: "enum", Required: false, Repeatable: true, Description: "Örn. implant, zirconia_crown. Boşsa tedavi adından çözülür. Katalog: GET /v1/viz/recipes", Enum: SupportedAnimationCodes()},
 				{Name: "items.description", Label: "Açıklama", Type: "string", Required: false, Repeatable: true},
 				{Name: "items.teeth", Label: "Dişler", Type: "string[]", Required: false, Repeatable: true},
 				{Name: "items.quantity", Label: "Adet", Type: "integer", Required: true, Repeatable: true},

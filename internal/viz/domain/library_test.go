@@ -47,4 +47,25 @@ func TestParseCodeAliases(t *testing.T) {
 			t.Fatalf("title %q -> %s %v", r.TitleTR, got, err)
 		}
 	}
+
+	cases := map[string]domain.Code{
+		"İmplant":                   domain.Implant,
+		"Diş İmplantı":              domain.Implant,
+		"DİŞ İMPLANTI":              domain.Implant,
+		"Zirkonyum Kuron":           domain.ZirconiaCrown,
+		"Üst Çene Zirkonyum Kuron":  domain.ZirconiaCrown,
+		"İnley / Onley":             domain.InlayOnlay,
+		"Köprü":                     domain.Bridge,
+		"Zirkonyum Köprü":           domain.Bridge,
+		"Dental Bridge":             domain.Bridge,
+		"Kompozit Dolgu (2 Yüzlü)":  domain.CompositeFilling,
+		"Cerrahi 20 Yaş Diş Çekimi": domain.SurgicalExtraction,
+		"hedstrom_cleaning":         domain.RootCanal,
+	}
+	for input, want := range cases {
+		got, err := domain.ParseCode(input)
+		if err != nil || got != want {
+			t.Fatalf("ParseCode(%q) = %q, %v; want %q", input, got, err, want)
+		}
+	}
 }

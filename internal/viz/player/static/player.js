@@ -12,6 +12,7 @@ import {
   Cinematics,
   playFissureSealant,
   playRootCanal,
+  playProceduralRecipe,
   ensureOpenMouth,
   positionCameraForTooth,
   flyCamera,
@@ -358,15 +359,13 @@ class Director {
     this.clipIndex = i;
     const clip = this.playlist.clips[i];
     if (!clip || !this.root) return;
-    const fn = Cinematics[clip.code] || (clip.code === "fissure_sealant" ? playFissureSealant : clip.code === "root_canal" ? playRootCanal : null);
-    if (!fn) {
-      this.caption("Bu sprint", "Şu an yalnızca fissür örtücü ve kanal tedavisi sahneleniyor.");
-      return;
-    }
+    const fn =
+      Cinematics[clip.code] ||
+      ((ctx, tooth) => playProceduralRecipe(ctx, clip.code, tooth, clip.moves, clip.title));
     this.kill();
     select.value = String(i);
     const tooth = (clip.teeth && clip.teeth[0]) || "16";
-    this.activeTL = fn(this.ctx(), tooth);
+    this.activeTL = fn(this.ctx(), tooth, clip);
     return this.activeTL;
   }
 
@@ -449,18 +448,16 @@ class Director {
 
 async function loadPlaylist() {
   const q = new URLSearchParams(location.search);
-  const items = q.get("items") || "fissure_sealant:16,root_canal:36";
   const demo = new URLSearchParams({
     code: q.get("code") || "",
     teeth: q.get("teeth") || "",
     locale: q.get("locale") || "tr",
-    items,
+    items: q.get("items") || "",
   });
   const res = await fetch(`/v1/viz/demo?${demo}`);
   if (!res.ok) throw new Error("demo playlist failed");
   const pl = await res.json();
-  pl.clips = (pl.clips || []).filter((c) => c.code === "fissure_sealant" || c.code === "root_canal");
-  if (!pl.clips.length) {
+  if (!pl.clips || !pl.clips.length) {
     pl.clips = [
       { code: "fissure_sealant", teeth: ["16"], title: "Fissür Örtücü", moves: [] },
       { code: "root_canal", teeth: ["36"], title: "Kanal tedavisi", moves: [] },

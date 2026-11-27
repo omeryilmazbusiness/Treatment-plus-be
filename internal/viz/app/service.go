@@ -133,7 +133,7 @@ func (s *Service) Playlist(ctx context.Context, workspaceID, planID id.ID) (doma
 		}
 		teeth := it.Teeth
 		if len(teeth) == 0 {
-			continue
+			teeth = domain.DefaultTeeth(code)
 		}
 		out.Clips = append(out.Clips, domain.Clip{
 			Code:  rec.Code,
@@ -150,7 +150,9 @@ func (s *Service) Playlist(ctx context.Context, workspaceID, planID id.ID) (doma
 
 func resolveCode(explicit, name string) (domain.Code, error) {
 	if strings.TrimSpace(explicit) != "" {
-		return domain.ParseCode(explicit)
+		if c, err := domain.ParseCode(explicit); err == nil {
+			return c, nil
+		}
 	}
 	return domain.ParseCode(name)
 }

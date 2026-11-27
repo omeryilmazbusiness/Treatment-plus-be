@@ -94,6 +94,10 @@ func Library() []Recipe {
 		rec(TempCrown, "prosthetic", "Geçici kron", "Temporary crown",
 			move(1, "Geçici oturur", "facial", 2400, fx(Seat, "crown", "#fde68a", "temp_crown")),
 		),
+		rec(Bridge, "prosthetic", "Köprü protez", "Dental bridge",
+			move(1, "Destek diş hazırlığı", "facial", 2000, fx(Material, "stump", "#e7e5e4", "")),
+			move(2, "Köprü gövdesi", "facial", 2600, fx(Seat, "crown", "#f8fafc", "bridge")),
+		),
 		rec(Scaling, "perio", "Diş taşı temizliği", "Scaling",
 			move(1, "Tartar", "cervical", 1800, fx(Hotspot, "tartar", "#a16207", "")),
 			move(2, "Scaler", "cervical", 2800, fx(Tool, "scaler", "#94a3b8", ""), fx(Particles, "chip", "#d6d3d1", ""), fx(Glow, "enamel", "#f8fafc", "")),
@@ -164,7 +168,9 @@ func DefaultTeeth(code Code) []string {
 	switch code {
 	case EmaxVeneer, CompositeBonding, Frenectomy, Gingivectomy, Braces, AlignerAttachment:
 		return []string{"11", "21"}
-	case NightGuard:
+	case Bridge:
+		return []string{"15", "16", "17"}
+	case NightGuard, OfficeWhitening, TopicalFluoride, Scaling:
 		return []string{"11", "21", "31", "41"}
 	case SurgicalExtraction:
 		return []string{"18"}
