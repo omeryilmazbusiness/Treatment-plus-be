@@ -58,8 +58,19 @@ type Copy struct {
 	Planned         string
 }
 
+// UseEnglishCopy reports whether the server-rendered PDF should use English copy.
+// The embedded PDF font has no Arabic glyphs and server-side FPDF does not have
+// full font shaping, so ar/ru fall back to English instead of Turkish.
+func UseEnglishCopy(locale string) bool {
+	switch strings.ToLower(strings.TrimSpace(locale)) {
+	case "en", "ar", "ru":
+		return true
+	}
+	return false
+}
+
 func CopyFor(locale string) Copy {
-	if strings.ToLower(strings.TrimSpace(locale)) == "en" {
+	if UseEnglishCopy(locale) {
 		return Copy{
 			CoverKicker:     "Treatment plan",
 			WelcomeTitle:    "Welcome",

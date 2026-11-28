@@ -20,6 +20,10 @@ func TestParseLocale(t *testing.T) {
 		{"TR", domain.LocaleTR, false},
 		{"en", domain.LocaleEN, false},
 		{"EN", domain.LocaleEN, false},
+		{"ar", domain.LocaleAR, false},
+		{"AR", domain.LocaleAR, false},
+		{"ru", domain.LocaleRU, false},
+		{"RU", domain.LocaleRU, false},
 		{"de", "", true},
 		{"", "", true},
 	}

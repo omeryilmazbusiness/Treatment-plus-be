@@ -52,7 +52,7 @@ func ClassicFormSections() []FormSection {
 			Description: "Bu PDF'in paleti ve dili. Klinik markası hesapta kalır; her planda yeniden seçilir.",
 			Fields: []FormField{
 				{Name: "palette", Label: "Renk paleti", Type: "enum", Required: true, Enum: []string{"navy", "forest", "rose", "slate"}},
-				{Name: "locale", Label: "Dil", Type: "enum", Required: true, Enum: []string{"tr", "en"}},
+				{Name: "locale", Label: "Dil", Type: "enum", Required: true, Enum: []string{"tr", "en", "ar", "ru"}},
 			},
 		},
 		{

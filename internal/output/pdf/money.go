@@ -4,7 +4,11 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/treatment-plus/treatment-plus-be/internal/output/domain"
 )
+
+func useEnglishCopy(locale string) bool { return domain.UseEnglishCopy(locale) }
 
 func formatMoney(amount int64, currency, locale string) string {
 	neg := amount < 0
@@ -15,7 +19,7 @@ func formatMoney(amount int64, currency, locale string) string {
 	frac := amount % 100
 	w := strconv.FormatInt(whole, 10)
 	var b strings.Builder
-	if locale == "en" {
+	if useEnglishCopy(locale) {
 		for i, c := range w {
 			if i > 0 && (len(w)-i)%3 == 0 {
 				b.WriteByte(',')

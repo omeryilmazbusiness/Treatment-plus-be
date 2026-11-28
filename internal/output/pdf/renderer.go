@@ -32,11 +32,12 @@ func (r *Renderer) Render(_ context.Context, snap domain.Snapshot, images app.Im
 	pdf.AddUTF8FontFromBytes("sans", "", fontRegular)
 	pdf.AddUTF8FontFromBytes("sans", "B", fontBold)
 
+	effectiveLocale := resolveOutputLocale(snap.Locale, snap.Clinic.Locale)
 	d := &doc{
 		pdf:    pdf,
 		snap:   snap,
 		theme:  domain.ThemeFor(firstNonEmpty(snap.Palette, snap.Clinic.Palette)),
-		copy:   domain.CopyFor(firstNonEmpty(snap.Locale, snap.Clinic.Locale)),
+		copy:   domain.CopyFor(effectiveLocale),
 		images: images,
 	}
 
@@ -158,7 +159,7 @@ func (d *doc) pageHighlights() {
 	}
 	stats := validStats
 	if len(stats) == 0 {
-		if strings.ToLower(strings.TrimSpace(d.snap.Locale)) == "en" {
+		if useEnglishCopy(d.snap.Locale) {
 			stats = []domain.Stat{
 				{Value: "15+", Label: "Years of Experience"},
 				{Value: "99.4%", Label: "Patient Satisfaction"},
@@ -216,7 +217,7 @@ func (d *doc) pageDoctor() {
 	d.pdf.CellFormat(178, 7, strings.TrimSpace(doc.Title+"  "+doc.Subtitle), "", 0, "L", false, 0, "")
 	bio := strings.TrimSpace(doc.Bio)
 	if bio == "" || bio == "—" || bio == "-" {
-		if strings.ToLower(strings.TrimSpace(d.snap.Locale)) == "en" {
+		if useEnglishCopy(d.snap.Locale) {
 			bio = "Our lead clinician specializes in aesthetic dentistry, implantology, and advanced smile design, dedicated to providing gentle and personalized treatment."
 		} else {
 			bio = "Kliniğimizin sorumlu hekimi estetik diş hekimliği, implantoloji ve dijital gülüş tasarımı alanlarında uzmanlaşmış olup, hasta konforunu ve klinik mükemmeliyeti esas almaktadır."
@@ -623,7 +624,7 @@ func (d *doc) pageResult() {
 		d.font("B", 16)
 		d.setText(d.theme.Primary)
 		d.pdf.SetXY(26, 52)
-		if strings.ToLower(strings.TrimSpace(d.snap.Locale)) == "en" {
+		if useEnglishCopy(d.snap.Locale) {
 			d.pdf.CellFormat(160, 8, "Personalized Digital Smile Design", "", 0, "L", false, 0, "")
 			d.font("", 11)
 			d.setText(d.theme.Muted)
@@ -649,7 +650,7 @@ func (d *doc) pageResult() {
 			{"Doğal Doku & Renk", "Doğal diş minesinin ışık yansımasını taklit eden estetik seramik restorasyonlar."},
 			{"Fonksiyonel Uyum", "Konforlu çiğneme, dengeli çene kapanışı ve uzun ömürlü stabilite."},
 		}
-		if strings.ToLower(strings.TrimSpace(d.snap.Locale)) == "en" {
+		if useEnglishCopy(d.snap.Locale) {
 			cards = []struct {
 				t string
 				d string
@@ -678,7 +679,7 @@ func (d *doc) pageResult() {
 		d.setText(d.theme.Primary)
 		d.pdf.SetXY(26, 248)
 		footerMsg := "Kliniğimiz, planlanan tedavi aşamalarında bu hedeflenen gülüş mimarisini eksiksiz uygulamayı taahhüt eder."
-		if strings.ToLower(strings.TrimSpace(d.snap.Locale)) == "en" {
+		if useEnglishCopy(d.snap.Locale) {
 			footerMsg = "Our clinical team is committed to realizing this targeted smile design across each sequenced visit."
 		}
 		d.pdf.CellFormat(158, 6, footerMsg, "", 0, "C", false, 0, "")
@@ -703,7 +704,7 @@ func (d *doc) pageLab() {
 	}
 	stats := validLabStats
 	if len(stats) == 0 {
-		if strings.ToLower(strings.TrimSpace(d.snap.Locale)) == "en" {
+		if useEnglishCopy(d.snap.Locale) {
 			stats = []domain.Stat{
 				{Value: "Micron", Label: "CAD/CAM Precision"},
 				{Value: "Class A+", Label: "Biocompatible Zirconia"},
@@ -757,7 +758,7 @@ func (d *doc) pageHotel() {
 	d.multi(16, 42, 178, 6.5, "", 12, d.theme.Ink, text)
 
 	var stats []domain.Stat
-	if strings.ToLower(strings.TrimSpace(d.snap.Locale)) == "en" {
+	if useEnglishCopy(d.snap.Locale) {
 		stats = []domain.Stat{
 			{Value: "VIP", Label: "Airport & Clinic Transfers"},
 			{Value: "4 & 5 Star", Label: "Partner Luxury Hotels"},
@@ -846,4 +847,22 @@ func firstBytes(a, b, c []byte) []byte {
 		return b
 	}
 	return c
+}
+
+func resolveOutputLocale(planLoc, clinicLoc string) string {
+	c := strings.ToLower(strings.TrimSpace(clinicLoc))
+	p := strings.ToLower(strings.TrimSpace(planLoc))
+	if c != "" && c != "tr" {
+		return c
+	}
+	if p != "" && p != "tr" {
+		return p
+	}
+	if c != "" {
+		return c
+	}
+	if p != "" {
+		return p
+	}
+	return "tr"
 }

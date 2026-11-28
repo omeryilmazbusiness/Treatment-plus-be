@@ -86,6 +86,23 @@ func TestClassicRenderer_EnglishPalette(t *testing.T) {
 	}
 }
 
+func TestClassicRenderer_ArabicRussianFallbackToEnglish(t *testing.T) {
+	for _, loc := range []string{"ar", "ru"} {
+		snap := sampleSnapshot()
+		snap.Locale = loc
+		raw, pages, err := pdf.NewRenderer().Render(context.Background(), snap, app.Images{Award: pdf.AwardJPEG()})
+		if err != nil {
+			t.Fatalf("%s: %v", loc, err)
+		}
+		if pages != 24 || !bytes.HasPrefix(raw, []byte("%PDF")) {
+			t.Fatalf("%s: pages=%d", loc, pages)
+		}
+		if domain.CopyFor(loc).WelcomeTitle != domain.CopyFor("en").WelcomeTitle {
+			t.Fatalf("%s must fall back to English copy", loc)
+		}
+	}
+}
+
 func TestClassicRenderer_NoDevLeaksInCopy(t *testing.T) {
 	for _, loc := range []string{"tr", "en"} {
 		c := domain.CopyFor(loc)

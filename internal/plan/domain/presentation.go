@@ -35,6 +35,8 @@ type Locale string
 const (
 	LocaleTR Locale = "tr"
 	LocaleEN Locale = "en"
+	LocaleAR Locale = "ar"
+	LocaleRU Locale = "ru"
 )
 
 func ParseLocale(s string) (Locale, error) {
@@ -43,7 +45,11 @@ func ParseLocale(s string) (Locale, error) {
 		return LocaleTR, nil
 	case string(LocaleEN):
 		return LocaleEN, nil
+	case string(LocaleAR):
+		return LocaleAR, nil
+	case string(LocaleRU):
+		return LocaleRU, nil
 	default:
-		return "", errx.New("invalid_locale", "unsupported locale (must be tr or en)", errx.ErrInvalid)
+		return "", errx.New("invalid_locale", "unsupported locale (must be tr, en, ar, or ru)", errx.ErrInvalid)
 	}
 }
